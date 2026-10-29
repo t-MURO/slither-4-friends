@@ -23,9 +23,5 @@ The README has setup, architecture and the dev workflow; read it first.
 - Commits: author Tadeo <tadeomuro@gmail.com>; messages in English.
 
 ## State (2026-10-29)
-- v4.0.0 is the first commit (tag `v4.0.0`), delivered as `slither-coop.bundle`. If `.git` does not exist yet:
-  `git init -b main && git fetch slither-coop.bundle main --tags && git reset FETCH_HEAD`, then delete the bundle.
-- Planned: private GitHub repo `slither-4-friends`: `gh repo create slither-4-friends --private --source . --push`, then `git push --tags`.
-- Obsolete v3 files in the root (delete them, never commit them): `bridge.js`, `coop.js`, `manifest.json`,
-  `popup.html`, `popup.css`, `popup.js`, `icons/`.
-- Small open UI issues: in the playground's friend card the code wraps; in the Coop list, "hasn't added you" still shows a green dot.
+- Repo: private GitHub `t-MURO/slither-4-friends` (branch `main`); tag releases as `v<version>`.
+- v4.0.1: friend-code wrap and the Coop list's misleading green swatch for offline friends are fixed.

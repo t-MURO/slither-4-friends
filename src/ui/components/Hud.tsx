@@ -40,7 +40,7 @@ export function Hud(props: { c: Controller; prefs: PrefsAdapter; onOpenPanel: ()
           {!v.rows.length && <div class="hint">Click <b>⚙</b> to see your friend code and add friends.</div>}
           {v.rows.map((r) => (
             <div class="fr" key={r.code}>
-              <span class="slc-sw" style={{ background: r.color }} />
+              <span class={'slc-sw' + (r.state === 'ok' ? '' : ' off')} style={{ background: r.color }} />
               <span class="slc-nm">{r.label}</span>
               {r.score != null && <span class="slc-scr" title="Length">{fmtScore(r.score)}</span>}
               <span class={'slc-in' + (r.near ? ' near' : '')}>{r.short}</span>

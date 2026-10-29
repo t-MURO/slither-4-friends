@@ -20,6 +20,7 @@
 .slc-hud .hint { color: #8b9bb0; font-size: 11px; margin-top: 4px; padding: 0 2px; }
 .slc-hud .hint b { color: #ffd84d; }
 .slc-sw { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+.slc-sw.off { opacity: .35; filter: grayscale(.7); }
 .slc-nm { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .slc-scr { font-weight: bold; color: #e8eef5; font-size: 11px; white-space: nowrap; }
 .slc-in { color: #9fb0c3; margin-left: auto; text-align: right; font-size: 11px; white-space: nowrap; }
@@ -39,7 +40,7 @@
 .slc-panel .pb { overflow: auto; padding: 10px 12px 12px; }
 .slc-card { background: #172033; border: 1px solid #263247; border-radius: 9px; padding: 9px 10px; margin-bottom: 9px; }
 .slc-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: #8b9bb0; font-weight: bold; margin-bottom: 5px; }
-.slc-code { font: bold 19px Consolas, monospace; letter-spacing: .1em; color: #ffd84d; user-select: all; }
+.slc-code { font: bold 19px Consolas, monospace; letter-spacing: .1em; color: #ffd84d; user-select: all; white-space: nowrap; }
 .slc-row { display: flex; align-items: center; gap: 8px; }
 .slc-row + .slc-row { margin-top: 7px; }
 .slc-grow { flex: 1; min-width: 0; }
