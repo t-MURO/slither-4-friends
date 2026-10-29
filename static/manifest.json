@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Slither Coop Locator",
+  "version": "0.0.0",
+  "description": "Find your friends in Slither (slither.com / slither.io): arrows, live scores, a clear minimap, an improved leaderboard, player tracking, pause, and same-server joining. All controls are in the game.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Slither Coop: open slither.com, the Coop panel is in the game (⚙ button)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["*://slither.io/*", "*://*.slither.io/*", "*://slither.com/*", "*://*.slither.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://slither.io/*", "*://*.slither.io/*", "*://slither.com/*", "*://*.slither.com/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://slither.io/*", "*://*.slither.io/*", "*://slither.com/*", "*://*.slither.com/*"],
+      "js": ["coop.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "slither-coop@tadeo.local",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
+  }
+}

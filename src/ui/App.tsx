@@ -1,0 +1,46 @@
+import { useEffect, useState } from 'preact/hooks';
+import type { PrefsAdapter } from '../adapters/types';
+import type { Controller } from '../app/controller';
+import { Hud } from './components/Hud';
+import { Leaderboard } from './components/Leaderboard';
+import { Panel } from './components/Panel';
+import { StatusPill, Toast } from './components/Toast';
+
+export const COMPONENTS = ['Hud', 'Panel', 'Leaderboard', 'Toast', 'StatusPill'] as const;
+export type ComponentName = (typeof COMPONENTS)[number];
+
+/** All in-game UI. `only` renders a single component (dev playground isolation). */
+export function App(props: { c: Controller; prefs: PrefsAdapter; only?: ComponentName | null }) {
+  const { c, prefs, only } = props;
+  const [panelOpen, setPanelOpen] = useState(only === 'Panel');
+
+  // P = pause, M = mouse on/off, Esc = close panel (never while typing)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'escape') { setPanelOpen(false); return; }
+      if (k !== 'p' && k !== 'm') return;
+      e.preventDefault();
+      e.stopPropagation();
+      const v = c.view.get();
+      if (k === 'm') c.setMouseLocked(!v.mouseLocked);
+      else c.setPaused(!v.paused);
+    };
+    addEventListener('keydown', onKey, true);
+    return () => removeEventListener('keydown', onKey, true);
+  }, [c]);
+
+  const show = (n: ComponentName) => !only || only === n;
+  return (
+    <div class="slc-root">
+      {show('Hud') && <Hud c={c} prefs={prefs} onOpenPanel={() => setPanelOpen(!panelOpen)} />}
+      {show('Panel') && panelOpen && <Panel c={c} prefs={prefs} onClose={() => setPanelOpen(false)} />}
+      {show('Leaderboard') && <Leaderboard c={c} />}
+      {show('Toast') && <Toast c={c} />}
+      {show('StatusPill') && <StatusPill c={c} />}
+    </div>
+  );
+}

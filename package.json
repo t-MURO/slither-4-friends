@@ -1,0 +1,25 @@
+{
+  "name": "slither-coop",
+  "version": "4.0.0",
+  "private": true,
+  "description": "Browser extension (Chrome + Firefox) for playing Slither with friends: locator arrows, live scores, clear minimap, improved leaderboard, player tracking, pause, mouse toggle.",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "zip": "node scripts/build.mjs --zip",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "preact": "^10.26.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
