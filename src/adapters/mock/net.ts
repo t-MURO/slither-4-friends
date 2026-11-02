@@ -1,6 +1,6 @@
 // Mock network: simulated friends whose connection state, server, position
 // and score are set from the dev panel. Implements NetAdapter.
-import type { PeerStatus, SignalState, StateMsg } from '../../core/types';
+import type { PeerStatus, Sighting, SignalState, StateMsg } from '../../core/types';
 import { normCode } from '../../core/util';
 import type { NetAdapter } from '../types';
 import type { MockWorld } from './world';
@@ -29,6 +29,8 @@ export interface MockFriend {
   orbit: boolean;
   score: number;
   color: string;
+  /** name of a player near them that they report to you ('' = none) */
+  sees: string;
 }
 
 export interface MockNet extends NetAdapter {
@@ -82,7 +84,9 @@ export function createMockNet(world: MockWorld): MockNet {
         : f.server === 'same' ? { sid, ip: world.server?.ip ?? '57.129.37.42', po: world.server?.po ?? 444 }
         : f.server === 'same-ipv6' ? { sid, ip: '[2001:41d0:304:200::5a3]', po: world.server?.po ?? 444 }
         : { sid: f.otherSid, ip: `92.222.100.${f.otherSid % 200}`, po: 444 };
-      onMsg(code, { t: 's', n: f.name, a: f.alive, sc: f.alive ? f.score : null, g: f.gnick, x: Math.round(x), y: Math.round(y), srv });
+      const sees = (f.sees ?? '').trim();   // older saved playground states lack it
+      const v: Sighting[] | undefined = f.alive && sees ? [[sees, Math.round(x + 260), Math.round(y - 180), 3100]] : undefined;
+      onMsg(code, { t: 's', n: f.name, a: f.alive, sc: f.alive ? f.score : null, g: f.gnick, x: Math.round(x), y: Math.round(y), srv, v });
     }
     world.removePuppets(keep);
   }, 100);

@@ -37,6 +37,7 @@ export const sampleFriend = (i: number, patch: Partial<MockFriend> = {}): MockFr
   orbit: true,
   score: 2400 + i * 1700,
   color: ['#ffa94d', '#c77dff', '#4dd2ff', '#ffe14d'][i % 4],
+  sees: '',
   ...patch,
 });
 

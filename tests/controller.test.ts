@@ -9,7 +9,7 @@ function snake(id: number, name: string, x: number, y: number): SnakeInfo {
   return { id, name, x, y, score: 500, color: '#fff', width: 30, points: () => [x, y, x + 100, y] };
 }
 
-function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null; snakes?: SnakeInfo[] } = {}) {
+function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null; snakes?: SnakeInfo[]; tracked?: unknown[] } = {}) {
   let clock = 1000;
   const snap: GameSnapshot = {
     phase: opts.phase ?? 'playing',
@@ -39,11 +39,12 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
     destroy: () => {},
   };
   let onMsg: (code: string, m: StateMsg) => void = () => {};
+  const sent: StateMsg[] = [];
   const status = new Map<string, PeerStatus>();
   const net: NetAdapter = {
     start: () => {},
     setFriends: () => {},
-    send: () => {},
+    send: (m) => { sent.push(m); },
     onMessage: (fn) => { onMsg = fn; },
     peerStatus: (code) => status.get(code) ?? 'waiting',
     signalState: () => 'online',
@@ -52,7 +53,7 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
   let saved: any = null;
   const storage: StorageAdapter = {
     kind: 'memory',
-    load: async () => ({ profile: { code: 'AAAA-2222', name: 'Me' }, friends: [{ code: 'BBBB-3333', label: 'Bob' }], settings: {} }),
+    load: async () => ({ profile: { code: 'AAAA-2222', name: 'Me' }, friends: [{ code: 'BBBB-3333', label: 'Bob' }], settings: { tracked: opts.tracked ?? [] } }),
     save: (c) => { saved = c; },
     onExternalChange: () => {},
   };
@@ -64,7 +65,7 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
     t: 's', n: 'Bob', a: true, sc: 1234, g: 'bobby', x: 1500, y: 1000, srv: { sid: 4263, ip: '[2001:db8::1]', po: 444 }, ...patch,
   });
   return {
-    c, snap, joined, status,
+    c, snap, joined, status, sent,
     send: (m: StateMsg) => onMsg('BBBB3333', m),
     msg,
     tick: (ms: number) => { clock += ms; },
@@ -155,5 +156,51 @@ test('clicking a snake tracks it: named -> saved, nameless -> this game only', a
   const rows = t.c.view.get().trackRows;
   assert.deepEqual(rows.map((r) => [r.label, r.temp]), [['MALFOY', false], ['(no name) · 500', true]]);
   assert.deepEqual(t.c.view.get().settings.tracked.map((x) => x.name), ['MALFOY']);
+  t.c.destroy();
+});
+
+test('we send the named snakes near us with every 5th message', async (ctx) => {
+  ctx.mock.timers.enable({ apis: ['setInterval'] });
+  const t = setup({ snakes: [snake(1, 'MALFOY', 2000, 2000), snake(2, '', 3000, 3000)] });
+  await t.c.init();
+  ctx.mock.timers.tick(500);
+  assert.equal(t.sent.length, 5);
+  assert.equal(t.sent.filter((m) => m.v).length, 1);
+  assert.deepEqual(t.sent[4].v, [['MALFOY', 2000, 2000, 500]]);
+  t.c.destroy();
+});
+
+test('a tracked player a friend can see shows on the map, then as last seen; arrows follow the toggle', async () => {
+  const t = setup({ tracked: [{ name: 'ZAINE', color: '#ff0000' }] });
+  await t.c.init();
+  t.send(t.msg({ v: [['zaine', 9000, 1000, 4000], ['other', 0, 0, 10]] }));
+  t.c.frame(t.snap);
+  t.c.refresh();
+  assert.deepEqual(t.c.trackedRemote().map((r) => [r.label, r.x, r.via]), [['zaine', 9000, 'Bob']]);
+  assert.match(t.c.view.get().trackRows[0].status, /^seen by Bob · /);
+  assert.deepEqual(t.c.trackedArrows(), []); // arrow is off by default
+  t.c.setTrackArrow('n:zaine', true);
+  assert.equal(t.c.view.get().settings.tracked[0].arrow, true);
+  assert.deepEqual(t.c.trackedArrows().map((a) => [a.source, a.x]), [['friend', 9000]]);
+
+  // friend's list goes stale -> last seen position
+  t.tick(2000);
+  t.send(t.msg());
+  t.c.frame(t.snap);
+  assert.deepEqual(t.c.trackedRemote(), []);
+  assert.deepEqual(t.c.trackedLastSeen().map((l) => [l.label, l.x]), [['zaine', 9000]]);
+  assert.deepEqual(t.c.trackedArrows().map((a) => [a.source, a.age]), [['seen', 2000]]);
+
+  // a friend on another server doesn't count
+  t.send(t.msg({ srv: { sid: 1, ip: '1.2.3.4', po: 444 }, v: [['ZAINE', 5000, 1000, 4000]] }));
+  t.c.frame(t.snap);
+  assert.deepEqual(t.c.trackedRemote(), []);
+
+  // seen by ourselves -> that position wins
+  t.send(t.msg({ v: [['ZAINE', 5000, 1000, 4000]] }));
+  t.snap.snakes = [snake(7, 'ZAINE', 1200, 1000)];
+  t.c.frame(t.snap);
+  assert.deepEqual(t.c.trackedRemote(), []);
+  assert.deepEqual(t.c.trackedArrows().map((a) => [a.source, a.x]), [['here', 1200]]);
   t.c.destroy();
 });

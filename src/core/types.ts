@@ -89,7 +89,12 @@ export interface StateMsg {
   x: number;
   y: number;
   srv: ServerRef | null;
+  /** named snakes near the sender, sent with every 5th message (older versions omit it) */
+  v?: Sighting[];
 }
+
+/** [name, x, y, score] of a snake a friend can see */
+export type Sighting = [string, number, number, number | null];
 
 export type PeerStatus = 'connected' | 'connecting' | 'offline' | 'noanswer' | 'waiting';
 export type SignalState = 'starting' | 'no-profile' | 'connecting' | 'online' | 'reconnecting' | 'id-taken' | 'error';
@@ -105,6 +110,8 @@ export interface FriendEntry {
 export interface TrackedEntry {
   name: string;
   color: string;
+  /** show an arrow to them at the screen edge */
+  arrow: boolean;
 }
 
 export interface Profile {

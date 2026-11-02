@@ -188,6 +188,9 @@ function Panel() {
                       <input type="range" min={10} max={40000} step={10} value={f.score} onInput={(e) => setFriend(i, { score: Number((e.currentTarget as HTMLInputElement).value) })} />
                       <span>{f.score}</span>
                     </div>
+                    <div class="r"><label>Sees player</label>
+                      <input type="text" placeholder="name (track it to test)" value={f.sees ?? ''} onChange={(e) => setFriend(i, { sees: (e.currentTarget as HTMLInputElement).value })} />
+                    </div>
                   </div>
                 ))}
               </div>

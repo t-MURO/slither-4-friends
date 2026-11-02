@@ -6,7 +6,7 @@ Browser-Erweiterung (Chrome + Firefox, Manifest V3) für [Slither](http://slithe
 - **Pfeile** am Bildschirmrand, Ringe und Umrisse um Freunde und verfolgte Schlangen
 - **Coop-Minimap**: größer, klarer, frei einstellbar (Größe, Ecke, Farben, Helligkeit, Namen, Linien, Raster)
 - **Verbesserte Rangliste** (umschaltbar auf das Original)
-- **Spieler verfolgen** nach Name, per Dropdown mit Suche, per Klick in die Rangliste oder auf eine Schlange, mit eigener Farbe (auch auf der Minimap)
+- **Spieler verfolgen** nach Name, per Dropdown mit Suche, per Klick in die Rangliste oder auf eine Schlange, mit eigener Farbe; auf der Minimap auch, wenn ein Coop-Freund auf deinem Server sie sieht, und optional mit Pfeil am Bildschirmrand (pro Spieler)
 - **Pause** (`P`): die Schlange kreist, bis du weiterspielst. **Maus aus** (`M`)
 
 Die gesamte Oberfläche ist im Spiel, ein Popup gibt es nicht.

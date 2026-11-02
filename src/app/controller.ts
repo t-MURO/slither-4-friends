@@ -7,13 +7,16 @@ import { sameServer } from '../core/servers';
 import { sanitizeConfig, sanitizeSettings, DEFAULT_SETTINGS, MAP_KEYS, TRACK_COLORS } from '../core/settings';
 import { createStore, type Store } from '../core/store';
 import type {
-  Config, FriendEntry, GameSnapshot, LeaderboardRow, Phase, Profile, ServerRef, Settings, SignalState, SnakeInfo, StateMsg, TrackedEntry,
+  Config, FriendEntry, GameSnapshot, LeaderboardRow, Phase, Profile, ServerRef, Settings, Sighting, SignalState, SnakeInfo, StateMsg, TrackedEntry,
 } from '../core/types';
 import { fmtCode, fmtDist, fmtScore, isColor, nameKey, normCode } from '../core/util';
 
 export const SEND_MS = 100;
 export const STALE_MS = 5000;
 export const LAST_SEEN_MS = 120_000;
+/** a friend's list of snakes near them counts for this long */
+export const SIGHTINGS_MS = 1500;
+const MAX_SIGHTINGS = 60;
 
 export interface FriendRow {
   code: string;
@@ -34,6 +37,7 @@ export interface TrackRow {
   label: string;
   color: string;
   temp: boolean;
+  arrow: boolean;
   status: string;
   nearby: boolean;
 }
@@ -89,9 +93,18 @@ export interface LiveFriend {
   score: number | null;
   srv: ServerRef | null;
   seen: number;
+  /** named snakes near them */
+  sights: { name: string; x: number; y: number; score: number | null }[];
+  sightsAt: number;
 }
 
-interface TempTracked { id: number; color: string; label: string; added: number }
+/** A tracked player one of your friends can see. */
+export interface RemoteTracked { key: string; x: number; y: number; color: string; label: string; score: number | null; via: string }
+
+/** Where to point a tracked player's arrow: from your own view, a friend's view, or where they were last seen. */
+export interface TrackTarget { x: number; y: number; color: string; label: string; score: number | null; source: 'here' | 'friend' | 'seen'; age: number }
+
+interface TempTracked { id: number; color: string; label: string; added: number; arrow: boolean }
 interface SeenEntry { key: string; name: string; x: number; y: number; t: number; score: number | null }
 
 export interface Controller {
@@ -105,6 +118,10 @@ export interface Controller {
   friendsHere(): (LiveFriend & { label: string; color: string })[];
   trackedVisible(): { snake: SnakeInfo; color: string; label: string }[];
   trackedLastSeen(): { x: number; y: number; color: string; label: string; age: number }[];
+  /** tracked players outside your view that a friend on your server can see */
+  trackedRemote(): RemoteTracked[];
+  /** one target per tracked player whose arrow is on (and whose position is known) */
+  trackedArrows(): TrackTarget[];
   // ---- actions
   setName(name: string): void;
   addFriend(code: string, label: string): string | null;
@@ -119,6 +136,7 @@ export interface Controller {
   toggleTrackSnake(id: number, color?: string): void;
   untrack(key: string): void;
   setTrackColor(key: string, color: string): void;
+  setTrackArrow(key: string, on: boolean): void;
   nextTrackColor(): string;
   candidates(): Candidate[];
   setPaused(on: boolean): void;
@@ -140,6 +158,8 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
   const temp: TempTracked[] = [];
   const seen = new Map<string, SeenEntry>();
   let visible: { snake: SnakeInfo; key: string; color: string; label: string }[] = [];
+  let remote: RemoteTracked[] = [];
+  let sendCount = 0;
   let seenSid = 0;
   let snap: GameSnapshot = game.snapshot();
   let paused = false;
@@ -217,7 +237,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     let f = live.get(code);
     const isNew = !f;
     if (!f) {
-      f = { code, name: '', gnick: '', alive: false, x: 0, y: 0, dx: 0, dy: 0, score: null, srv: null, seen: 0 };
+      f = { code, name: '', gnick: '', alive: false, x: 0, y: 0, dx: 0, dy: 0, score: null, srv: null, seen: 0, sights: [], sightsAt: 0 };
       live.set(code, f);
     }
     f.name = String(m.n ?? '').slice(0, 24);
@@ -231,6 +251,16 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       : null;
     if (isNew || !f.alive) { f.dx = f.x; f.dy = f.y; }
     f.seen = now();
+    if (Array.isArray(m.v)) {
+      f.sights = [];
+      for (const s of m.v.slice(0, MAX_SIGHTINGS)) {
+        if (!Array.isArray(s) || typeof s[0] !== 'string' || !s[0].trim()) continue;
+        const x = Number(s[1]), y = Number(s[2]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        f.sights.push({ name: s[0].slice(0, 24), x, y, score: typeof s[3] === 'number' && Number.isFinite(s[3]) ? s[3] : null });
+      }
+      f.sightsAt = f.seen;
+    }
   });
 
   function sendState() {
@@ -245,6 +275,11 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       y: a ? Math.round(snap.self!.y) : 0,
       srv: inGame() ? snap.server : null,
     };
+    // named snakes near us, so friends can find the players they track (~2x per second)
+    if (a && ++sendCount % 5 === 0) {
+      msg.v = snap.snakes.filter((s) => s.name.trim()).slice(0, MAX_SIGHTINGS)
+        .map((s): Sighting => [s.name.slice(0, 24), Math.round(s.x), Math.round(s.y), s.score]);
+    }
     net.send(msg);
   }
 
@@ -264,8 +299,8 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
   // ------------------------------------------------------------- tracking
   const tkey = (t: TrackedEntry) => 'n:' + nameKey(t.name);
   const allTracked = () => [
-    ...cfg.settings.tracked.map((t) => ({ key: tkey(t), label: t.name, color: t.color, temp: false })),
-    ...temp.map((t) => ({ key: 'i:' + t.id, label: t.label, color: t.color, temp: true })),
+    ...cfg.settings.tracked.map((t) => ({ key: tkey(t), label: t.name, color: t.color, temp: false, arrow: t.arrow })),
+    ...temp.map((t) => ({ key: 'i:' + t.id, label: t.label, color: t.color, temp: true, arrow: t.arrow })),
   ];
 
   function trackedFor(name: string): TrackedEntry | null {
@@ -282,6 +317,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     const sid = snap.server?.sid ?? 0;
     if (sid && sid !== seenSid) { seen.clear(); temp.length = 0; seenSid = sid; }
     visible = [];
+    remote = [];
     if (!inGame()) return;
     const t = now();
     for (const s of snap.snakes) {
@@ -294,6 +330,19 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       visible.push({ snake: s, key, color, label });
       seen.set(key + '|' + s.id, { key, name: label, x: s.x, y: s.y, t, score: s.score });
     }
+    // tracked players near a friend on our server (nameless ones can't be matched)
+    for (const code of friendCodes) {
+      const f = live.get(code);
+      if (!fresh(f) || !f.alive || t - f.sightsAt > SIGHTINGS_MS || !sameServer(snap.server, f.srv)) continue;
+      for (const s of f.sights) {
+        const named = trackedFor(s.name);
+        if (!named) continue;
+        const key = tkey(named);
+        if (visible.some((v) => v.key === key) || remote.some((r) => r.key === key)) continue;
+        remote.push({ key, x: s.x, y: s.y, color: named.color, label: s.name, score: s.score, via: labelOf(code) });
+        seen.set(key + '|friend', { key, name: s.name, x: s.x, y: s.y, t, score: s.score });
+      }
+    }
     const keys = new Set(allTracked().map((x) => x.key));
     for (const [k, v] of seen) if (t - v.t > LAST_SEEN_MS || !keys.has(v.key)) seen.delete(k);
     for (let i = temp.length - 1; i >= 0; i--) {
@@ -305,10 +354,15 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
   function trackStatus(key: string): { text: string; nearby: boolean } {
     const parts: string[] = [];
     const vis = visible.find((v) => v.key === key);
+    const rem = remote.find((r) => r.key === key);
     let nearby = false;
     if (vis && alive()) {
       const s = vis.snake, me = snap.self!;
       parts.push('nearby · ' + fmtDist(Math.hypot(s.x - me.x, s.y - me.y)) + ' away · ' + fmtScore(s.score));
+      nearby = true;
+    } else if (rem && alive()) {
+      const me = snap.self!;
+      parts.push('seen by ' + rem.via + ' · ' + fmtDist(Math.hypot(rem.x - me.x, rem.y - me.y)) + ' away · ' + fmtScore(rem.score));
       nearby = true;
     } else {
       let last: SeenEntry | null = null;
@@ -395,7 +449,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       friendRows: friendRows(),
       trackRows: allTracked().map((t) => {
         const st = trackStatus(t.key);
-        return { key: t.key, label: t.label, color: t.color, temp: t.temp, status: st.text, nearby: st.nearby };
+        return { key: t.key, label: t.label, color: t.color, temp: t.temp, arrow: t.arrow, status: st.text, nearby: st.nearby };
       }),
       lbRows: lbRows(),
       rank: snap.rank,
@@ -435,7 +489,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     const i = temp.findIndex((t) => t.id === id);
     if (i >= 0) { temp.splice(i, 1); toast('Stopped tracking that snake'); }
     else {
-      temp.push({ id, color: color || nextTrackColor(), label: '(no name) · ' + fmtScore(s?.score), added: now() });
+      temp.push({ id, color: color || nextTrackColor(), label: '(no name) · ' + fmtScore(s?.score), added: now(), arrow: false });
       toast('Tracking this nameless snake (for this game)');
     }
     refresh();
@@ -448,7 +502,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     const exists = list.some((t) => nameKey(t.name) === nameKey(name));
     const tracked = exists
       ? list.filter((t) => nameKey(t.name) !== nameKey(name))
-      : [...list, { name, color: color && isColor(color) ? color : nextTrackColor() }];
+      : [...list, { name, color: color && isColor(color) ? color : nextTrackColor(), arrow: false }];
     toast(exists ? 'Stopped tracking ' + name : 'Tracking ' + name);
     setSettings({ ...cfg.settings, tracked });
   }
@@ -512,12 +566,39 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     trackedVisible: () => visible.map((v) => ({ snake: v.snake, color: v.color, label: v.label })),
     trackedLastSeen() {
       const vis = new Set(visible.map((v) => v.snake.id));
+      const located = new Set(remote.map((r) => r.key));
       const colors = new Map(allTracked().map((t) => [t.key, t.color]));
       const out: { x: number; y: number; color: string; label: string; age: number }[] = [];
       for (const [k, v] of seen) {
-        if (vis.has(Number(k.split('|')[1]))) continue;
+        if (vis.has(Number(k.split('|')[1])) || located.has(v.key)) continue;
         const color = colors.get(v.key);
         if (color) out.push({ x: v.x, y: v.y, color, label: v.name, age: now() - v.t });
+      }
+      return out;
+    },
+    trackedRemote: () => remote.slice(),
+    trackedArrows() {
+      const out: TrackTarget[] = [];
+      if (!alive()) return out;
+      const me = snap.self!;
+      const t = now();
+      for (const tr of allTracked()) {
+        if (!tr.arrow) continue;
+        let best: TrackTarget | null = null;
+        for (const v of visible) {
+          if (v.key !== tr.key) continue;
+          if (!best || Math.hypot(v.snake.x - me.x, v.snake.y - me.y) < Math.hypot(best.x - me.x, best.y - me.y)) {
+            best = { x: v.snake.x, y: v.snake.y, color: tr.color, label: v.label, score: v.snake.score, source: 'here', age: 0 };
+          }
+        }
+        const r = remote.find((x) => x.key === tr.key);
+        if (!best && r) best = { x: r.x, y: r.y, color: tr.color, label: r.label, score: r.score, source: 'friend', age: 0 };
+        if (!best) {
+          let last: SeenEntry | null = null;
+          for (const v of seen.values()) if (v.key === tr.key && (!last || v.t > last.t)) last = v;
+          if (last) best = { x: last.x, y: last.y, color: tr.color, label: last.name, score: last.score, source: 'seen', age: t - last.t };
+        }
+        if (best) out.push(best);
       }
       return out;
     },
@@ -586,6 +667,11 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       const t = temp.find((x) => 'i:' + x.id === key);
       if (t) { t.color = color; refresh(); return; }
       setSettings({ ...cfg.settings, tracked: cfg.settings.tracked.map((x) => (tkey(x) === key ? { ...x, color } : x)) });
+    },
+    setTrackArrow(key, on) {
+      const t = temp.find((x) => 'i:' + x.id === key);
+      if (t) { t.arrow = on; refresh(); return; }
+      setSettings({ ...cfg.settings, tracked: cfg.settings.tracked.map((x) => (tkey(x) === key ? { ...x, arrow: on } : x)) });
     },
     nextTrackColor,
     candidates() {

@@ -96,7 +96,8 @@ export function TrackTab(props: { c: Controller }) {
               <input type="color" value={t.color} title="Color on map, outline and leaderboard"
                 onInput={(e) => c.setTrackColor(t.key, (e.currentTarget as HTMLInputElement).value)} />
               <div class="slc-nm">{t.label}{t.temp && <span class="cd">this game</span>}</div>
-              <span />
+              <button class={'slc-arw' + (t.arrow ? ' on' : '')} title={t.arrow ? 'Hide the arrow to this player' : 'Show an arrow to this player at the screen edge'}
+                onClick={() => c.setTrackArrow(t.key, !t.arrow)}>➤ Arrow</button>
               <button class="rm" title="Stop tracking" onClick={() => c.untrack(t.key)}>×</button>
               <div class={'st' + (t.nearby ? ' ok' : '')}>{t.status}</div>
             </div>
@@ -107,8 +108,9 @@ export function TrackTab(props: { c: Controller }) {
       <Card>
         <Toggle label='Match part of a name (e.g. "zain" matches "ZAINE")' checked={v.partial} onChange={(trackPartial) => c.updateSettings({ trackPartial })} />
         <div class="slc-muted" style={{ marginTop: '8px' }}>
-          The game server only sends you snakes near you. Tracked players show on your map and get an outline while they're in your area;
-          after they leave, a fading ring marks where they were last seen. The leaderboard always shows their rank.
+          The game server only sends you snakes near you. Tracked players show on your map and get an outline while they're in your area,
+          or while a Coop friend on your server can see them. After that, a fading ring marks where they were last seen.
+          With <b>➤ Arrow</b> on, an arrow at the screen edge points to them (or to where they were last seen). The leaderboard always shows their rank.
         </div>
       </Card>
     </>

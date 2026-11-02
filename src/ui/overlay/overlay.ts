@@ -211,7 +211,15 @@ export function startOverlay(c: Controller, game: GameAdapter, parent: HTMLEleme
         const [sx, sy] = cam.toScreen(v.snake.x, v.snake.y);
         const m = 40;
         if (sx > m && sx < vw - m && sy > m && sy < vh - m) label(v.label + ' · ' + fmtScore(v.snake.score), sx, sy - 34, v.color, 12);
-        else if (s.arrows) arrow(sx, sy, v.color, v.label, fmtDist(Math.hypot(v.snake.x - me.x, v.snake.y - me.y)) + ' · ' + fmtScore(v.snake.score), pulse, 0.8);
+      }
+      // arrows only for players whose arrow is switched on in the Track tab
+      for (const a of c.trackedArrows()) {
+        const [sx, sy] = cam.toScreen(a.x, a.y);
+        const m = 40;
+        if (sx > m && sx < vw - m && sy > m && sy < vh - m) continue;
+        const dist = fmtDist(Math.hypot(a.x - me.x, a.y - me.y));
+        const info = a.source === 'seen' ? 'last seen ' + Math.round(a.age / 1000) + 's ago · ' + dist : dist + ' · ' + fmtScore(a.score);
+        arrow(sx, sy, a.color, a.label, info, a.source === 'seen' ? 0 : pulse, 0.8);
       }
     }
 
@@ -239,15 +247,6 @@ export function startOverlay(c: Controller, game: GameAdapter, parent: HTMLEleme
           if (s.mapNames) label(ls.label + ' · ' + Math.round(ls.age / 1000) + 's', p[0], p[1] - s.dotSize - 9, ls.color, 10);
           ctx.restore();
         }
-        for (const v of tracked) {
-          const p = g.at(v.snake.x, v.snake.y);
-          const r = s.dotSize + 1;
-          ctx.beginPath();
-          ctx.moveTo(p[0], p[1] - r); ctx.lineTo(p[0] + r, p[1]); ctx.lineTo(p[0], p[1] + r); ctx.lineTo(p[0] - r, p[1]); ctx.closePath();
-          ctx.fillStyle = v.color; ctx.fill();
-          ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.stroke();
-          if (s.mapNames) label(v.label, p[0], p[1] - r - 9, v.color, 10);
-        }
       }
       if (layers.has('friends')) {
         for (const f of friends) {
@@ -263,6 +262,20 @@ export function startOverlay(c: Controller, game: GameAdapter, parent: HTMLEleme
       ctx.strokeStyle = s.myColor;
       ctx.stroke();
       dot(myPt[0], myPt[1], s.dotSize, s.myColor);
+      // tracked players last, so the ones near you aren't hidden under your own dot
+      if (layers.has('tracked')) {
+        const diamond = (x: number, y: number, color: string, text: string) => {
+          const p = g.at(x, y);
+          const r = s.dotSize + 1;
+          ctx.beginPath();
+          ctx.moveTo(p[0], p[1] - r); ctx.lineTo(p[0] + r, p[1]); ctx.lineTo(p[0], p[1] + r); ctx.lineTo(p[0] - r, p[1]); ctx.closePath();
+          ctx.fillStyle = color; ctx.fill();
+          ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.stroke();
+          if (s.mapNames) label(text, p[0], p[1] - r - 9, color, 10);
+        };
+        for (const v of tracked) diamond(v.snake.x, v.snake.y, v.color, v.label);
+        for (const r of c.trackedRemote()) diamond(r.x, r.y, r.color, r.label);
+      }
     }
 
     if (layers.has('banner')) {

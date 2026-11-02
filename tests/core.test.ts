@@ -46,11 +46,11 @@ test('joining a server picks the IPv4 address for the server id', () => {
 });
 
 test('settings are sanitized', () => {
-  const s = sanitizeSettings({ mapSize: 9999, myColor: 'red', markMode: 'nope', tracked: [{ name: '  Bob ' }, { name: '' }, null] });
+  const s = sanitizeSettings({ mapSize: 9999, myColor: 'red', markMode: 'nope', tracked: [{ name: '  Bob ' }, { name: '' }, null, { name: 'Ann', arrow: true }] });
   assert.equal(s.mapSize, 460);
   assert.equal(s.myColor, DEFAULT_SETTINGS.myColor);
   assert.equal(s.markMode, 'click');
-  assert.deepEqual(s.tracked.map((t) => t.name), ['Bob']);
+  assert.deepEqual(s.tracked.map((t) => [t.name, t.arrow]), [['Bob', false], ['Ann', true]]);
   assert.match(s.tracked[0].color, /^#[0-9a-f]{6}$/i);
 });
 

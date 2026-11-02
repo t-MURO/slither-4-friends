@@ -41,9 +41,9 @@ export function sanitizeSettings(raw: unknown): Settings {
   const bool = (k: keyof Settings) => (typeof r[k] === 'boolean' ? (r[k] as boolean) : (d[k] as boolean));
   const color = (k: keyof Settings) => (isColor(r[k]) ? (r[k] as string) : (d[k] as string));
   const tracked: TrackedEntry[] = (Array.isArray(r.tracked) ? r.tracked : [])
-    .filter((t): t is { name: string; color?: unknown } => !!t && typeof t.name === 'string' && !!t.name.trim())
+    .filter((t): t is { name: string; color?: unknown; arrow?: unknown } => !!t && typeof t.name === 'string' && !!t.name.trim())
     .slice(0, 40)
-    .map((t, i) => ({ name: t.name.trim().slice(0, 24), color: isColor(t.color) ? t.color : TRACK_COLORS[i % TRACK_COLORS.length] }));
+    .map((t, i) => ({ name: t.name.trim().slice(0, 24), color: isColor(t.color) ? t.color : TRACK_COLORS[i % TRACK_COLORS.length], arrow: t.arrow === true }));
   return {
     arrows: bool('arrows'),
     autoFollow: bool('autoFollow'),
