@@ -2,7 +2,7 @@
 // while playing; it verifies that the game adapter still finds everything it
 // needs (useful after a Slither update) and that two network adapters can
 // connect to each other. Results: console + window.__slcCheck.
-import { createPeerNet } from '../adapters/real/peer-net';
+import { createPeerNet, ICE_SERVERS } from '../adapters/real/peer-net';
 import { createSlitherGame } from '../adapters/real/slither-game';
 import { newCode, normCode } from '../core/util';
 
@@ -56,6 +56,19 @@ async function run() {
   }
   game.destroy();
   ok('handlers restored', !W.onmousemove?.__slc && !W.onmousedown?.__slc);
+
+  // ---------------- TURN relay: gathering a relay candidate proves the credentials work
+  if (!__TURN_SERVERS__.length) r['TURN relay reachable'] = 'not configured (turn.json)';
+  else {
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceTransportPolicy: 'relay' });
+    let relay = false;
+    pc.onicecandidate = (e) => { if (e.candidate?.type === 'relay') relay = true; };
+    pc.createDataChannel('check');
+    await pc.setLocalDescription(await pc.createOffer());
+    for (let i = 0; i < 40 && !relay; i++) await new Promise((res) => setTimeout(res, 250));
+    pc.close();
+    ok('TURN relay reachable', relay);
+  }
 
   // ---------------- network adapter: two peers that list each other
   const a = createPeerNet(), b = createPeerNet();

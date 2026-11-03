@@ -24,7 +24,7 @@ export interface DevState {
 const KEY = 'slcoop.devstate';
 
 export const sampleFriend = (i: number, patch: Partial<MockFriend> = {}): MockFriend => ({
-  code: ['LUKA-S2X7', 'MIAA-Q8ZZ', 'TOMM-K3F9', 'NOAH-PP42'][i % 4],
+  code: ['KUKA-S2X7', 'MEAA-Q8ZZ', 'TAMM-K3F9', 'NAAH-PP42'][i % 4],
   name: ['Lukas', 'Mia', 'Tom', 'Noah'][i % 4],
   gnick: ['lukas_xx', 'mia', 'TomTom', 'noah'][i % 4],
   link: 'connected',

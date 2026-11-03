@@ -137,6 +137,7 @@ function Panel() {
                   <button onClick={() => preset({ server: 'same-ipv6' })}>+ same server via IPv6</button>
                   <button onClick={() => preset({ addsMe: false })}>+ hasn't added me</button>
                   <button onClick={() => preset({ link: 'offline' })}>+ offline</button>
+                  <span class="muted">New ones aren't in my list yet: if they've added me, that's a friend request.</span>
                 </div>
                 {s.friends.map((f, i) => (
                   <div class="f" key={i}>
@@ -162,7 +163,7 @@ function Panel() {
                     </div>
                     <div class="r"><label>Connection</label>
                       <select value={f.link} onChange={(e) => setFriend(i, { link: (e.currentTarget as HTMLSelectElement).value as MockFriend['link'] })}>
-                        {['connected', 'connecting', 'offline', 'waiting'].map((x) => <option key={x}>{x}</option>)}
+                        {['connected', 'connecting', 'offline', 'failed', 'waiting'].map((x) => <option key={x}>{x}</option>)}
                       </select>
                       <label style={{ minWidth: 0 }}>Alive</label>
                       <input type="checkbox" checked={f.alive} onChange={(e) => setFriend(i, { alive: (e.currentTarget as HTMLInputElement).checked })} />

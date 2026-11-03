@@ -3,7 +3,14 @@
 // drops connections whose messages don't look exactly like PeerJS ones).
 //
 // Mutual friends: of two friends, the one whose code sorts first dials; the
-// other side only answers codes on its own list.
+// other side only answers codes on its own list. The other side says hello
+// (every DIAL_EVERY_MS while not connected), so the dialer doesn't wait for its
+// next retry. Offers and hellos carry our name: when they reach someone who
+// hasn't added us yet, that's a friend request (onRequest).
+//
+// When both sides' networks block direct connections, the data goes through a
+// TURN relay from __TURN_SERVERS__ (turn.json, built in, see README); without
+// it only direct connections work.
 import type { PeerStatus, SignalState, StateMsg } from '../../core/types';
 import { randomToken } from '../../core/util';
 import type { NetAdapter } from '../types';
@@ -11,10 +18,13 @@ import type { NetAdapter } from '../types';
 const SIGNAL_HOST = '0.peerjs.com';
 const PREFIX = 'slcoop2-';
 const DIAL_EVERY_MS = 10_000;
-const ICE: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
-];
+/** connectionId of the "I'm online, dial me" message (a CANDIDATE, so the PeerJS server forwards it) */
+const HELLO = 'hello';
+/** no ANSWER by then: they haven't added our code */
+const ANSWER_MS = 8_000;
+/** answered, but the connection itself didn't open (ICE through NAT/TURN can be slow) */
+const CONNECT_MS = 30_000;
+export const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }, ...__TURN_SERVERS__];
 
 interface Link {
   peerId: string;
@@ -23,6 +33,8 @@ interface Link {
   pc: RTCPeerConnection;
   dc: RTCDataChannel | null;
   cands: RTCIceCandidateInit[];
+  /** they answered our offer (or we answered theirs) */
+  answered: boolean;
   open: boolean;
   timer: ReturnType<typeof setTimeout> | undefined;
 }
@@ -33,12 +45,16 @@ export function createPeerNet(): NetAdapter {
   let hb: ReturnType<typeof setInterval> | undefined;
   let state: SignalState = 'starting';
   let myCode = '';
+  let myName = '';
   let friends: string[] = [];
   const links = new Map<string, Link>();
   const lastDial = new Map<string, number>();
-  const peerState = new Map<string, 'trying' | 'offline' | 'noanswer'>();
+  const peerState = new Map<string, 'trying' | 'offline' | 'noanswer' | 'failed'>();
+  /** hello sent, and neither EXPIRE (offline) nor an offer (they listed us) came back yet */
+  const helloPending = new Set<string>();
   let onMsg: (code: string, msg: StateMsg) => void = () => {};
-  const dialTimer = setInterval(dialTick, 2000);
+  let onReq: (code: string, name: string) => void = () => {};
+  const dialTimer = setInterval(() => dialTick(), 2000);
 
   // ---------------------------------------------------------------- signaling
   function raw(o: object) { if (ws?.readyState === 1) ws.send(JSON.stringify(o)); }
@@ -72,7 +88,7 @@ export function createPeerNet(): NetAdapter {
 
   function onSignal(m: any) {
     switch (m.type) {
-      case 'OPEN': state = 'online'; lastDial.clear(); dialTick(); break;
+      case 'OPEN': state = 'online'; lastDial.clear(); dialTick(true); break;
       case 'ID-TAKEN': {
         // the same code is already online (game open in another tab)
         state = 'id-taken';
@@ -85,11 +101,15 @@ export function createPeerNet(): NetAdapter {
       case 'OFFER': if (m.payload) acceptOffer(m.src, m.payload); break;
       case 'ANSWER': {
         const l = links.get(m.src);
-        if (l && m.payload && l.cid === m.payload.connectionId) l.pc.setRemoteDescription(m.payload.sdp).then(() => flush(l)).catch(() => {});
+        if (!l || !m.payload || l.cid !== m.payload.connectionId) break;
+        l.answered = true;
+        if (peerState.get(l.code) === 'noanswer') peerState.set(l.code, 'trying');
+        l.pc.setRemoteDescription(m.payload.sdp).then(() => flush(l)).catch(() => {});
         break;
       }
       case 'CANDIDATE': {
         const l = links.get(m.src);
+        if (m.payload?.connectionId === HELLO) { helloFrom(m.src, m.payload); break; }
         if (!l || !m.payload || l.cid !== m.payload.connectionId) break;
         if (l.pc.remoteDescription) l.pc.addIceCandidate(m.payload.candidate).catch(() => {});
         else l.cands.push(m.payload.candidate);
@@ -100,6 +120,7 @@ export function createPeerNet(): NetAdapter {
         if (typeof m.src === 'string') {
           const l = links.get(m.src);
           if (l && !l.open) drop(m.src);
+          helloPending.delete(m.src);
           peerState.set(m.src.slice(PREFIX.length), 'offline');
         }
         break;
@@ -110,8 +131,9 @@ export function createPeerNet(): NetAdapter {
   // ---------------------------------------------------------------- links
   function newLink(peerId: string, cid: string): Link {
     drop(peerId);
-    const pc = new RTCPeerConnection({ iceServers: ICE });
-    const l: Link = { peerId, code: peerId.slice(PREFIX.length), cid, pc, dc: null, cands: [], open: false, timer: undefined };
+    helloPending.delete(peerId);
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const l: Link = { peerId, code: peerId.slice(PREFIX.length), cid, pc, dc: null, cands: [], answered: false, open: false, timer: undefined };
     pc.onicecandidate = (e) => { if (e.candidate) signal('CANDIDATE', peerId, { candidate: e.candidate.toJSON(), type: 'data', connectionId: cid }); };
     pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') down(l); };
     links.set(peerId, l);
@@ -139,21 +161,48 @@ export function createPeerNet(): NetAdapter {
   }
   function down(l: Link) {
     if (links.get(l.peerId) !== l) return;
+    // both sides were willing, but no network path was found
+    if (l.answered && !l.open) peerState.set(l.code, 'failed');
     drop(l.peerId);
     lastDial.delete(l.peerId);
   }
 
-  function dialTick() {
+  /** dial the friends we dial; say hello to the others. now = ignore the retry interval */
+  function dialTick(now = false) {
     if (state !== 'online' || !myCode) return;
     const me = PREFIX + myCode;
     const t = Date.now();
     for (const code of friends) {
       const peerId = PREFIX + code;
-      if (!(me < peerId) || links.has(peerId)) continue; // the other side dials
-      if (t - (lastDial.get(peerId) || 0) < DIAL_EVERY_MS) continue;
+      if (links.has(peerId)) continue;
+      if (!now && t - (lastDial.get(peerId) || 0) < DIAL_EVERY_MS) continue;
       lastDial.set(peerId, t);
-      void dial(peerId);
+      if (me < peerId) void dial(peerId);
+      else hello(peerId);
     }
+  }
+  // tell a friend who dials us that we're here (offline: EXPIRE; not added us yet: a request for them)
+  function hello(peerId: string) {
+    const code = peerId.slice(PREFIX.length);
+    helloPending.add(peerId);
+    // no EXPIRE (so it reached them) and they didn't dial: they haven't added us
+    setTimeout(() => { if (helloPending.has(peerId) && !links.has(peerId)) peerState.set(code, 'noanswer'); }, ANSWER_MS);
+    signal('CANDIDATE', peerId, { candidate: { candidate: '', sdpMid: '0', sdpMLineIndex: 0 }, type: 'data', connectionId: HELLO, metadata: { name: myName } });
+  }
+  function requestFrom(src: string, p: any) {
+    const code = src.slice(PREFIX.length);
+    if (code.length !== 8 || code === myCode) return;
+    onReq(code, typeof p?.metadata?.name === 'string' ? p.metadata.name.slice(0, 24) : '');
+  }
+  function helloFrom(src: unknown, p: any) {
+    if (typeof src !== 'string' || !src.startsWith(PREFIX)) return;
+    if (!friends.includes(src.slice(PREFIX.length))) { requestFrom(src, p); return; }
+    const l = links.get(src);
+    if (l?.answered) return;
+    // an unanswered offer was sent while they were still offline: dial again now
+    if (l) drop(src);
+    lastDial.delete(src);
+    dialTick();
   }
   async function dial(peerId: string) {
     const cid = 'dc_' + randomToken(10);
@@ -163,15 +212,20 @@ export function createPeerNet(): NetAdapter {
     try {
       const offer = await l.pc.createOffer();
       await l.pc.setLocalDescription(offer);
-      signal('OFFER', peerId, { sdp: { sdp: offer.sdp, type: offer.type }, type: 'data', connectionId: cid, label: cid, reliable: false, serialization: 'binary' });
+      signal('OFFER', peerId, { sdp: { sdp: offer.sdp, type: offer.type }, type: 'data', connectionId: cid, label: cid, reliable: false, serialization: 'binary', metadata: { name: myName } });
     } catch { drop(peerId); return; }
     // no answer: online but they haven't added our code (offline would have produced EXPIRE)
-    l.timer = setTimeout(() => { if (links.get(peerId) === l && !l.open) { drop(peerId); peerState.set(l.code, 'noanswer'); } }, 8000);
+    l.timer = setTimeout(() => {
+      if (links.get(peerId) !== l || l.open) return;
+      if (!l.answered) { drop(peerId); peerState.set(l.code, 'noanswer'); return; }
+      l.timer = setTimeout(() => { if (links.get(peerId) === l && !l.open) down(l); }, CONNECT_MS - ANSWER_MS);
+    }, ANSWER_MS);
   }
   async function acceptOffer(src: unknown, p: any) {
     if (typeof src !== 'string' || !src.startsWith(PREFIX)) return;
-    if (!friends.includes(src.slice(PREFIX.length))) return; // mutual rule
+    if (!friends.includes(src.slice(PREFIX.length))) { requestFrom(src, p); return; } // mutual rule
     const l = newLink(src, p.connectionId);
+    l.answered = true;
     l.pc.ondatachannel = (e) => wire(l, e.channel);
     try {
       await l.pc.setRemoteDescription(p.sdp);
@@ -188,6 +242,7 @@ export function createPeerNet(): NetAdapter {
       for (const id of [...links.keys()]) drop(id);
       lastDial.clear();
       peerState.clear();
+      helloPending.clear();
       myCode = code;
       if (!code) { state = 'no-profile'; return; }
       state = 'connecting';
@@ -197,19 +252,22 @@ export function createPeerNet(): NetAdapter {
     setFriends(codes) {
       friends = [...codes];
       for (const id of [...links.keys()]) if (!friends.includes(id.slice(PREFIX.length))) drop(id);
-      dialTick();
+      dialTick(true);
     },
     send(msg) {
       const s = JSON.stringify(msg);
       for (const l of links.values()) if (l.open && l.dc?.readyState === 'open') { try { l.dc.send(s); } catch { /* ignore */ } }
     },
     onMessage(fn) { onMsg = fn; },
+    onRequest(fn) { onReq = fn; },
+    setName(name) { myName = name.slice(0, 24); },
     peerStatus(code): PeerStatus {
       const l = links.get(PREFIX + code);
       if (l?.open) return 'connected';
       const ps = peerState.get(code);
       if (ps === 'offline') return 'offline';
       if (ps === 'noanswer') return 'noanswer';
+      if (ps === 'failed') return 'failed';   // stays while we retry
       if (l) return 'connecting';
       return 'waiting';
     },

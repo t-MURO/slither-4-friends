@@ -1,6 +1,6 @@
 {
   "name": "slither-coop",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "private": true,
   "description": "Browser extension (Chrome + Firefox) for playing Slither with friends: locator arrows, live scores, clear minimap, improved leaderboard, player tracking, pause, mouse toggle.",
   "type": "module",

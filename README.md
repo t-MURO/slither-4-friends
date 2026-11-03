@@ -32,6 +32,25 @@ npm run dev        # Playground mit Live-Reload: http://localhost:8020
 
 Die Version kommt aus `package.json` und wird beim Build ins Manifest geschrieben.
 
+### TURN-Relay (für Freunde hinter strengen Netzen)
+
+Wenn die Netze zweier Spieler keine direkte Verbindung zulassen (häufig bei Handy-Hotspots oder manchen Internetanbietern), laufen die Daten über einen TURN-Relay. Ohne ihn verbinden sich solche Paare nie; der Status zeigt dann „can't connect“.
+
+1. Kostenloses Konto bei [metered.ca](https://www.metered.ca/stun-turn) anlegen (Free-Tier: 20 GB/Monat; Coop braucht ca. 10 MB pro Stunde und Paar, und nur Paare ohne direkte Verbindung laufen über den Relay). Keine Zahlungsart hinterlegen, dann kann nichts kosten.
+2. Im Dashboard unter *TURN Server* → *Credentials* Username und Passwort holen.
+3. Im Projektordner eine Datei `turn.json` anlegen (wird nicht committet), mit den `turn:`/`turns:`-Einträgen aus dem „RTCConfiguration Snippet“ als JSON:
+   ```json
+   [
+     { "urls": "turn:global.relay.metered.ca:80", "username": "<username>", "credential": "<passwort>" },
+     { "urls": "turn:global.relay.metered.ca:80?transport=tcp", "username": "<username>", "credential": "<passwort>" },
+     { "urls": "turn:global.relay.metered.ca:443", "username": "<username>", "credential": "<passwort>" },
+     { "urls": "turns:global.relay.metered.ca:443?transport=tcp", "username": "<username>", "credential": "<passwort>" }
+   ]
+   ```
+4. Neu bauen (`npm run build` / `npm run zip`) und die neue Version an alle Freunde verteilen.
+
+Alternativ dasselbe JSON in der Umgebungsvariable `TURN_SERVERS`. Die Zugangsdaten stecken danach in der gebauten Erweiterung: gib das Zip nur an Freunde weiter. Werden sie missbraucht, ist schlimmstenfalls das Freikontingent aufgebraucht; dann im Dashboard neue Credentials anlegen, die alten löschen und neu bauen. Ob der Relay erreichbar ist, prüft `check.js` („TURN relay reachable“).
+
 ## Erweiterung installieren (aus `dist/extension`)
 
 - **Chrome / Edge / Brave:** `chrome://extensions` → Entwicklermodus an → „Entpackte Erweiterung laden“ → Ordner `dist/extension`. Nach einem neuen Build dort auf ↻ klicken.
@@ -63,7 +82,7 @@ Das lädt den aktuellen Quellcode ins echte Spiel und tauscht ihn bei jeder Änd
 
 ### Adapter-Check nach einem Slither-Update
 
-Slither ändert gelegentlich sein Spiel. Gleiches Lesezeichen wie oben, aber mit `check.js` statt `inject.js`, während eine Runde läuft. Der Check prüft, ob alle Spielvariablen noch da sind (eigene Schlange, Server-ID, Kamera, Schlangen, Rangliste, Minimap, Serverwahl, Pause-Steuerung). Außerdem prüft er, ob zwei Peers sich über den PeerJS-Server verbinden und Nachrichten austauschen und ob eine einseitige Freundschaft korrekt **nicht** verbindet. Das Ergebnis erscheint nach ca. 35 s als Tabelle in der Konsole und in `window.__slcCheck`.
+Slither ändert gelegentlich sein Spiel. Gleiches Lesezeichen wie oben, aber mit `check.js` statt `inject.js`, während eine Runde läuft. Der Check prüft, ob alle Spielvariablen noch da sind (eigene Schlange, Server-ID, Kamera, Schlangen, Rangliste, Minimap, Serverwahl, Pause-Steuerung). Außerdem prüft er, ob der TURN-Relay erreichbar ist, ob zwei Peers sich über den PeerJS-Server verbinden und Nachrichten austauschen und ob eine einseitige Freundschaft korrekt **nicht** verbindet. Das Ergebnis erscheint nach ca. 35 s als Tabelle in der Konsole und in `window.__slcCheck`.
 
 ## Architektur
 
@@ -89,7 +108,7 @@ tests/         node:test via tsx
 
 **Erweiterung zur Laufzeit:** `bridge.js` läuft in der isolierten Welt und hat Zugriff auf `chrome.storage.sync`. `coop.js` läuft in der Seitenwelt (MAIN) und hat Zugriff auf die Spielvariablen. Beide sprechen über `CustomEvent`s (`slcoop:ready`, `slcoop:config`, `slcoop:save`) miteinander.
 
-**Netzwerk:** Verbindung von Browser zu Browser per WebRTC. Nur das Signaling läuft über den öffentlichen PeerJS-Server (`0.peerjs.com`); einen eigenen Server gibt es nicht. Die Peer-ID ist `slcoop2-<Code>`. Es wählt immer die kleinere ID, und die Gegenseite antwortet nur Codes aus ihrer eigenen Liste. Ein Freund kommt also nur zustande, wenn beide sich eingetragen haben. Gesendet werden 10× pro Sekunde Name, Position, Punkte und Server.
+**Netzwerk:** Verbindung von Browser zu Browser per WebRTC. Nur das Signaling läuft über den öffentlichen PeerJS-Server (`0.peerjs.com`); einen eigenen Server gibt es nicht. Klappt keine direkte Verbindung, gehen die Daten über den TURN-Relay aus `turn.json` (siehe oben). Die Peer-ID ist `slcoop2-<Code>`. Es wählt immer die kleinere ID, und die Gegenseite antwortet nur Codes aus ihrer eigenen Liste. Ein Freund kommt also nur zustande, wenn beide sich eingetragen haben. Die Seite mit der größeren ID meldet sich alle 10 s mit einem „hello“ (eine CANDIDATE-Nachricht mit `connectionId: 'hello'`), damit die andere sofort wählt. Angebote und hellos tragen den eigenen Namen (`metadata.name`); erreichen sie jemanden, der den Code noch nicht eingetragen hat, sieht er eine **Freundschaftsanfrage** (Annehmen trägt den Code ein, Ablehnen gilt bis zum Neuladen). Ohne eigenen Server klappt das nur, solange beide das Spiel offen haben. Gesendet werden 10× pro Sekunde Name, Position, Punkte und Server.
 
 **Server:** Jeder Slither-Server steht doppelt in der Liste (IPv4 und IPv6, gleiche `sid`). Verglichen wird deshalb über die `sid`, und beim Beitreten wird immer der IPv4-Eintrag erzwungen.
 

@@ -96,7 +96,7 @@ export interface StateMsg {
 /** [name, x, y, score] of a snake a friend can see */
 export type Sighting = [string, number, number, number | null];
 
-export type PeerStatus = 'connected' | 'connecting' | 'offline' | 'noanswer' | 'waiting';
+export type PeerStatus = 'connected' | 'connecting' | 'offline' | 'noanswer' | 'failed' | 'waiting';
 export type SignalState = 'starting' | 'no-profile' | 'connecting' | 'online' | 'reconnecting' | 'id-taken' | 'error';
 
 export interface FriendEntry {

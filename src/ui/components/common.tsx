@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { PrefsAdapter } from '../../adapters/types';
+import type { Controller } from '../../app/controller';
 
 /** Stops mouse/keyboard events inside our UI from reaching the game (steering, boosting). */
 const stop = (e: Event) => e.stopPropagation();
@@ -8,6 +9,38 @@ export const shield = {
   onMouseDown: stop, onMouseUp: stop, onMouseMove: stop, onClick: stop, onKeyDown: stop, onKeyUp: stop,
   onKeyPress: stop, onWheel: stop, onTouchStart: stop, onTouchMove: stop, onContextMenu: stop,
 };
+
+/** "Name wants to add you" with Accept / decline (HUD and Friends tab). */
+export function RequestRow(props: { c: Controller; code: string; name: string }) {
+  const { c, code, name } = props;
+  return (
+    <div class="slc-req">
+      <span class="slc-nm" title={code}>{name || code}<span class="cd">wants to add you</span></span>
+      <button class="slc-go" onClick={() => c.acceptRequest(code)}>Accept</button>
+      <button class="rm" title="Decline (until you reload the game)" onClick={() => c.declineRequest(code)}>×</button>
+    </div>
+  );
+}
+
+/** Copies text; call it straight from a click. slither.com is plain http, where
+ *  navigator.clipboard doesn't exist, so fall back to the old copy command. */
+export async function copyText(text: string): Promise<boolean> {
+  if (window.isSecureContext && navigator.clipboard) {
+    try { await navigator.clipboard.writeText(text); return true; } catch { /* fall back */ }
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+  const prev = document.activeElement as HTMLElement | null;
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { /* ignore */ }
+  ta.remove();
+  prev?.focus?.();
+  return ok;
+}
 
 /** Makes a fixed-position box draggable by a handle; remembers the position in prefs. */
 export function useDraggable(prefs: PrefsAdapter, key: string) {

@@ -9,7 +9,7 @@ import { createStore, type Store } from '../core/store';
 import type {
   Config, FriendEntry, GameSnapshot, LeaderboardRow, Phase, Profile, ServerRef, Settings, Sighting, SignalState, SnakeInfo, StateMsg, TrackedEntry,
 } from '../core/types';
-import { fmtCode, fmtDist, fmtScore, isColor, nameKey, normCode } from '../core/util';
+import { fmtCode, fmtDist, fmtScore, impossibleCode, isColor, nameKey, normCode } from '../core/util';
 
 export const SEND_MS = 100;
 export const STALE_MS = 5000;
@@ -17,6 +17,9 @@ export const LAST_SEEN_MS = 120_000;
 /** a friend's list of snakes near them counts for this long */
 export const SIGHTINGS_MS = 1500;
 const MAX_SIGHTINGS = 60;
+/** a friend request disappears this long after its last repeat (they closed the game or removed us) */
+export const REQUEST_MS = 30_000;
+const MAX_REQUESTS = 5;
 
 export interface FriendRow {
   code: string;
@@ -77,6 +80,8 @@ export interface View {
   pendingJoin: string | null;
   others: string[];
   serverId: number;
+  /** friend requests: people who added our code but aren't on our list */
+  requests: { code: string; name: string }[];
   toast: { id: number; text: string } | null;
 }
 
@@ -129,6 +134,9 @@ export interface Controller {
   renameFriend(code: string, label: string): void;
   setFriendColor(code: string, color: string): void;
   joinFriend(code: string): void;
+  acceptRequest(code: string): void;
+  /** hide this request until the game is reloaded */
+  declineRequest(code: string): void;
   updateSettings(patch: Partial<Settings>): void;
   resetMap(): void;
   trackName(name: string, color?: string): string | null;
@@ -156,6 +164,8 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
   let friendCodes: string[] = [];
   const live = new Map<string, LiveFriend>();
   const temp: TempTracked[] = [];
+  const requests = new Map<string, { name: string; seen: number }>();
+  const declined = new Set<string>();
   const seen = new Map<string, SeenEntry>();
   let visible: { snake: SnakeInfo; key: string; color: string; label: string }[] = [];
   let remote: RemoteTracked[] = [];
@@ -188,6 +198,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     pendingJoin: null,
     others: [],
     serverId: 0,
+    requests: [],
     toast: null,
   });
 
@@ -207,6 +218,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     syncFriendCodes();
     if (myCode !== oldCode) {
       live.clear();
+      requests.clear();
       net.start(myCode);
     }
     if (generatedCode) save();
@@ -216,6 +228,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
   function syncFriendCodes() {
     friendCodes = cfg.friends.map((f) => normCode(f.code)).filter((c) => c && c !== myCode);
     for (const code of [...live.keys()]) if (!friendCodes.includes(code)) live.delete(code);
+    for (const code of friendCodes) requests.delete(code);
     net.setFriends(friendCodes);
   }
 
@@ -263,7 +276,18 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     }
   });
 
+  net.onRequest((rawCode, rawName) => {
+    const code = normCode(rawCode);
+    if (code.length !== 8 || impossibleCode(code) || code === myCode || friendCodes.includes(code) || declined.has(code)) return;
+    const isNew = !requests.has(code);
+    if (isNew && requests.size >= MAX_REQUESTS) return;
+    const name = String(rawName ?? '').trim().slice(0, 24);
+    requests.set(code, { name, seen: now() });
+    if (isNew) { toast((name || fmtCode(code)) + ' wants to add you as a friend'); refresh(); }
+  });
+
   function sendState() {
+    net.setName(myName());
     const a = alive();
     const msg: StateMsg = {
       t: 's',
@@ -408,7 +432,8 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
         return { ...base, score: f.score, canJoin: true, state: 'ok', short, long: 'Connected · ' + short + scoreTxt };
       }
       if (st === 'offline') return { ...base, state: 'off', short: 'offline', long: 'Offline (game not open)' };
-      if (st === 'noanswer') return { ...base, state: 'off', short: "hasn't added you", long: "Online, but hasn't added your code yet" };
+      if (st === 'failed') return { ...base, state: 'off', short: "can't connect", long: "You've added each other, but the connection is blocked (network or firewall). Retrying…" };
+      if (st === 'noanswer') return { ...base, state: 'try', short: 'request sent', long: 'Online · friend request sent, waiting for them to accept' };
       if (st === 'connecting') return { ...base, state: 'try', short: 'connecting…', long: 'Connecting…' };
       return { ...base, state: 'off', short: 'waiting…', long: 'Waiting for them to open the game' };
     });
@@ -432,6 +457,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
 
   function refresh() {
     if (destroyed) return;
+    for (const [code, r] of requests) if (now() - r.seen > REQUEST_MS) requests.delete(code);
     const others: string[] = [];
     for (const code of friendCodes) {
       const f = live.get(code);
@@ -460,6 +486,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       pendingJoin: game.pendingServer() ? pendingLabel : null,
       others,
       serverId: snap.server?.sid ?? 0,
+      requests: [...requests].map(([code, r]) => ({ code: fmtCode(code), name: r.name })),
     }));
   }
 
@@ -610,6 +637,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     },
     addFriend(code, label) {
       const c = normCode(code);
+      if (impossibleCode(c)) return 'Friend codes never contain 0, O, 1, I or L. Check the code for typos.';
       if (c.length !== 8) return 'A friend code has 8 letters/numbers, like ABCD-2345.';
       if (c === myCode) return "That's your own code. Send it to your friend instead.";
       if (cfg.friends.some((f) => normCode(f.code) === c)) return 'Already in your list.';
@@ -633,6 +661,20 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       pendingLabel = labelOf(normCode(code));
       if (snap.phase === 'menu') game.startGame();
       else toast(`Your next game joins ${pendingLabel}'s server.`);
+      refresh();
+    },
+    acceptRequest(code) {
+      const c = normCode(code);
+      const r = requests.get(c);
+      if (!r) return;
+      requests.delete(c);
+      const err = controller.addFriend(c, r.name);
+      toast(err ?? 'Added ' + (r.name || fmtCode(c)) + '. Connecting…');
+    },
+    declineRequest(code) {
+      const c = normCode(code);
+      requests.delete(c);
+      declined.add(c);
       refresh();
     },
     updateSettings(patch) {

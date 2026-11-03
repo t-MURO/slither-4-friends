@@ -5,6 +5,9 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 /** "abcd-2345 " -> "ABCD2345" */
 export const normCode = (c: unknown): string => String(c ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+/** codes are made from CODE_ALPHABET, which leaves out look-alikes */
+export const impossibleCode = (normalized: string): boolean => /[01ILO]/.test(normalized);
+
 /** "ABCD2345" -> "ABCD-2345" (anything else is returned normalized) */
 export function fmtCode(c: unknown): string {
   const n = normCode(c);

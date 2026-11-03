@@ -1,11 +1,11 @@
 import { useState } from 'preact/hooks';
 import type { Controller } from '../../app/controller';
 import { useStore } from '../../core/store';
-import { Card } from './common';
+import { Card, copyText, RequestRow } from './common';
 
 export function FriendsTab(props: { c: Controller }) {
   const { c } = props;
-  const v = useStore(c.view, (v) => ({ profile: v.profile, rows: v.friendRows, friends: v.friends, kind: v.storeKind, def: v.settings.friendColor }));
+  const v = useStore(c.view, (v) => ({ profile: v.profile, rows: v.friendRows, requests: v.requests, friends: v.friends, kind: v.storeKind, def: v.settings.friendColor }));
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('');
   const [err, setErr] = useState('');
@@ -18,7 +18,7 @@ export function FriendsTab(props: { c: Controller }) {
     if (!e) { setCode(''); setLabel(''); }
   };
   const copy = async () => {
-    try { await navigator.clipboard.writeText(v.profile.code); setCopied('Copied'); } catch { setCopied('Ctrl+C'); }
+    setCopied((await copyText(v.profile.code)) ? 'Copied' : 'Select + Ctrl+C');
     setTimeout(() => setCopied('Copy'), 1300);
   };
 
@@ -26,7 +26,7 @@ export function FriendsTab(props: { c: Controller }) {
     <>
       <Card label="Your friend code">
         <div class="slc-row">
-          <span class="slc-code">{v.profile.code}</span>
+          <span class="slc-code" style={{ userSelect: 'all' }}>{v.profile.code}</span>
           <span class="slc-grow" />
           <button class="slc-btn ghost" onClick={copy}>{copied}</button>
         </div>
@@ -34,6 +34,12 @@ export function FriendsTab(props: { c: Controller }) {
         <input type="text" maxLength={24} placeholder="Uses your Slither nickname if empty" value={v.profile.name}
           onInput={(e) => c.setName((e.currentTarget as HTMLInputElement).value)} />
       </Card>
+
+      {v.requests.length > 0 && (
+        <Card label="Friend requests">
+          {v.requests.map((r) => <RequestRow key={r.code} c={c} code={r.code} name={r.name} />)}
+        </Card>
+      )}
 
       <Card label="Add a friend">
         <div class="slc-row">
@@ -48,7 +54,7 @@ export function FriendsTab(props: { c: Controller }) {
           <button class="slc-btn" onClick={add}>Add</button>
         </div>
         {err && <div class="slc-err">{err}</div>}
-        <div class="slc-muted" style={{ marginTop: '7px' }}>You only see each other when <b>both</b> of you have added the other's code.</div>
+        <div class="slc-muted" style={{ marginTop: '7px' }}>Your friend gets a request to accept while their game is open. You can also both add each other's code.</div>
       </Card>
 
       <Card label="Friends">

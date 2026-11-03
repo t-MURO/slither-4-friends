@@ -38,6 +38,11 @@ export interface NetAdapter {
   /** Send to every connected friend. */
   send(msg: StateMsg): void;
   onMessage(fn: (code: string, msg: StateMsg) => void): void;
+  /** Someone not on our list is trying to connect (they added our code): a friend request.
+   *  Repeats about every 10 s while they keep trying. name = what they call themselves ('' = unknown). */
+  onRequest(fn: (code: string, name: string) => void): void;
+  /** Our display name, sent along with connection attempts (shown in their friend request). */
+  setName(name: string): void;
   peerStatus(code: string): PeerStatus;
   signalState(): SignalState;
   stop(): void;

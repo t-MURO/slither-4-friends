@@ -39,13 +39,17 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
     destroy: () => {},
   };
   let onMsg: (code: string, m: StateMsg) => void = () => {};
+  let onReq: (code: string, name: string) => void = () => {};
+  const listed: string[][] = [];
   const sent: StateMsg[] = [];
   const status = new Map<string, PeerStatus>();
   const net: NetAdapter = {
     start: () => {},
-    setFriends: () => {},
+    setFriends: (codes) => { listed.push(codes); },
     send: (m) => { sent.push(m); },
     onMessage: (fn) => { onMsg = fn; },
+    onRequest: (fn) => { onReq = fn; },
+    setName: () => {},
     peerStatus: (code) => status.get(code) ?? 'waiting',
     signalState: () => 'online',
     stop: () => {},
@@ -65,7 +69,8 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
     t: 's', n: 'Bob', a: true, sc: 1234, g: 'bobby', x: 1500, y: 1000, srv: { sid: 4263, ip: '[2001:db8::1]', po: 444 }, ...patch,
   });
   return {
-    c, snap, joined, status, sent,
+    c, snap, joined, status, sent, listed,
+    request: (code: string, name: string) => onReq(code, name),
     send: (m: StateMsg) => onMsg('BBBB3333', m),
     msg,
     tick: (ms: number) => { clock += ms; },
@@ -109,7 +114,10 @@ test('statuses: hasn\'t added you / offline / stale data', async () => {
   t.status.set('BBBB3333', 'noanswer');
   t.c.frame(t.snap);
   t.c.refresh();
-  assert.equal(t.c.view.get().friendRows[0].short, "hasn't added you");
+  assert.equal(t.c.view.get().friendRows[0].short, 'request sent');
+  t.status.set('BBBB3333', 'failed');
+  t.c.refresh();
+  assert.equal(t.c.view.get().friendRows[0].short, "can't connect");
   t.status.set('BBBB3333', 'connected');
   t.send(t.msg());
   t.tick(6000); // older than STALE_MS
@@ -125,6 +133,7 @@ test('adding friends validates codes', async () => {
   assert.match(t.c.addFriend('xx', '') ?? '', /8 letters/);
   assert.match(t.c.addFriend('aaaa2222', '') ?? '', /your own code/);
   assert.match(t.c.addFriend('bbbb-3333', '') ?? '', /Already/);
+  assert.match(t.c.addFriend('CCCC-4O44', '') ?? '', /typos/);
   assert.equal(t.c.addFriend('cccc-4444', 'Cy'), null);
   assert.deepEqual(t.c.view.get().friends.map((f) => f.code), ['BBBB-3333', 'CCCC-4444']);
   t.c.destroy();
@@ -202,5 +211,42 @@ test('a tracked player a friend can see shows on the map, then as last seen; arr
   t.c.frame(t.snap);
   assert.deepEqual(t.c.trackedRemote(), []);
   assert.deepEqual(t.c.trackedArrows().map((a) => [a.source, a.x]), [['here', 1200]]);
+  t.c.destroy();
+});
+
+test('friend requests: shown, accepted into the list, declined for the session, expire', async () => {
+  const t = setup();
+  await t.c.init();
+  t.request('CCCC4444', 'Cy');
+  t.request('cccc-4444', 'Cy');           // repeats don't duplicate
+  t.request('BBBB3333', 'Bob');           // already a friend
+  t.request('AAAA2222', 'Me');            // my own code
+  assert.deepEqual(t.c.view.get().requests, [{ code: 'CCCC-4444', name: 'Cy' }]);
+  assert.match(t.c.view.get().toast?.text ?? '', /Cy wants to add you/);
+
+  t.c.acceptRequest('CCCC-4444');
+  assert.deepEqual(t.c.view.get().requests, []);
+  assert.deepEqual(t.c.view.get().friends.map((f) => [f.code, f.label]), [['BBBB-3333', 'Bob'], ['CCCC-4444', 'Cy']]);
+  assert.ok(t.listed.at(-1)?.includes('CCCC4444'), 'new friend is passed to the network');
+
+  t.request('DDDD5555', '');
+  assert.deepEqual(t.c.view.get().requests, [{ code: 'DDDD-5555', name: '' }]);
+  t.c.declineRequest('DDDD-5555');
+  t.request('DDDD5555', '');
+  assert.deepEqual(t.c.view.get().requests, [], 'declined code stays hidden');
+
+  t.request('EEEE6666', 'Eve');
+  t.tick(31_000);                          // they stopped trying
+  t.c.refresh();
+  assert.deepEqual(t.c.view.get().requests, []);
+  t.c.destroy();
+});
+
+test('"request sent" status for friends who have not accepted yet', async () => {
+  const t = setup();
+  await t.c.init();
+  t.status.set('BBBB3333', 'noanswer');
+  t.c.refresh();
+  assert.equal(t.c.view.get().friendRows[0].short, 'request sent');
   t.c.destroy();
 });

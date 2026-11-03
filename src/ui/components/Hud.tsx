@@ -2,14 +2,14 @@ import type { PrefsAdapter } from '../../adapters/types';
 import type { Controller } from '../../app/controller';
 import { useStore } from '../../core/store';
 import { fmtScore } from '../../core/util';
-import { shield, useDraggable } from './common';
+import { RequestRow, shield, useDraggable } from './common';
 import { useState } from 'preact/hooks';
 
 /** The small "Coop" box: friend list with live status, plus Pause / Mouse / ⚙ buttons. */
 export function Hud(props: { c: Controller; prefs: PrefsAdapter; onOpenPanel: () => void }) {
   const { c, prefs } = props;
   const v = useStore(c.view, (v) => ({
-    rows: v.friendRows, signal: v.signal, pending: v.pendingJoin, showList: v.settings.hud,
+    rows: v.friendRows, requests: v.requests, signal: v.signal, pending: v.pendingJoin, showList: v.settings.hud,
     paused: v.paused, mouseLocked: v.mouseLocked, phase: v.phase,
   }));
   const [minimized, setMin] = useState(() => prefs.get('min', false));
@@ -34,6 +34,9 @@ export function Hud(props: { c: Controller; prefs: PrefsAdapter; onOpenPanel: ()
         <button class="ib" title="Coop settings & friends" onClick={props.onOpenPanel}>⚙</button>
         {v.showList && <button class="ib" title="Minimize" onClick={toggleMin}>{minimized ? '+' : '–'}</button>}
       </div>
+      {v.requests.length > 0 && (
+        <div class="bd">{v.requests.map((r) => <RequestRow key={r.code} c={c} code={r.code} name={r.name} />)}</div>
+      )}
       {!collapsed && (
         <div class="bd">
           {v.signal === 'id-taken' && <div class="hint">The game is open in another tab with the same code; Coop runs there.</div>}

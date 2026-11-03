@@ -18,10 +18,16 @@ The README has setup, architecture and the dev workflow; read it first.
   a real and a mock implementation, and if useful a control in the playground panel (`src/dev/panel.tsx`).
 - Servers: compare by `sid` (each server is listed as IPv4 and IPv6); when joining, force the IPv4 entry.
 - PeerJS signaling messages must match PeerJS exactly (key order `{type, payload, dst}`), or 0.peerjs.com drops them.
-- Peer id is `slcoop2-<code>`; the smaller id dials; a peer answers only codes on its own list (mutual rule).
+- TURN relay: static metered.ca logins in `turn.json` (gitignored, RTCIceServer[]) or env `TURN_SERVERS`,
+  built in as `__TURN_SERVERS__`. The old PeerJS TURN hosts are gone; without a relay, strict-NAT pairs never connect.
+- Peer id is `slcoop2-<code>`; the smaller id dials, the larger sends a `hello` CANDIDATE every 10 s; a peer answers
+  only codes on its own list (mutual rule). Offers/hellos from codes not on the list become friend requests (`onRequest`).
+- slither.com is plain http: no `navigator.clipboard` (use `copyText`), and the browser pane can't load localhost scripts there.
 - After a Slither update: run `check.js` in the real game while playing (see README).
 - Commits: author Tadeo <tadeomuro@gmail.com>; messages in English.
 
 ## State (2026-10-29)
 - Repo: private GitHub `t-MURO/slither-4-friends` (branch `main`); tag releases as `v<version>`.
 - v4.0.1: friend-code wrap and the Coop list's misleading green swatch for offline friends are fixed.
+- v4.2.0 (uncommitted): TURN relay via turn.json, "can't connect"/"request sent" statuses, faster reconnects (hello),
+  friend requests, copy button fix on http.
