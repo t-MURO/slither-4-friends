@@ -1,4 +1,5 @@
 import type { Config, FriendEntry, Profile, Settings, TrackedEntry } from './types';
+import { ZOOM_MAX, ZOOM_MIN } from './geometry';
 import { clamp, fmtCode, isColor, newCode, normCode } from './util';
 
 export const TRACK_COLORS = ['#ff4d4d', '#ffa94d', '#ffe14d', '#4dd2ff', '#c77dff', '#ff6bd6', '#ffffff'];
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tracked: [],
   trackPartial: false,
   markMode: 'click',
+  zoom: 1,
 };
 
 export const MAP_KEYS = [
@@ -67,6 +69,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     tracked,
     trackPartial: bool('trackPartial'),
     markMode: pick(r.markMode, ['click', 'shift', 'right', 'off'] as const, d.markMode),
+    zoom: clamp(r.zoom, ZOOM_MIN, ZOOM_MAX, d.zoom),
   };
 }
 

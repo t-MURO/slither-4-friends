@@ -2,7 +2,7 @@
 // storage are provided. UI components only read `controller.view` and call
 // the action methods; the overlay asks for per-frame models.
 import type { Adapters, ClickInfo } from '../adapters/types';
-import { hitTest } from '../core/geometry';
+import { hitTest, stepZoom } from '../core/geometry';
 import { sameServer } from '../core/servers';
 import { sanitizeConfig, sanitizeSettings, DEFAULT_SETTINGS, MAP_KEYS, TRACK_COLORS } from '../core/settings';
 import { createStore, type Store } from '../core/store';
@@ -149,6 +149,8 @@ export interface Controller {
   candidates(): Candidate[];
   setPaused(on: boolean): void;
   setMouseLocked(on: boolean): void;
+  /** zoom in (+) or out (-) by this many steps */
+  zoomBy(steps: number): void;
   toast(text: string): void;
   destroy(): void;
 }
@@ -495,6 +497,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     cfg = { ...cfg, settings: next };
     game.setNativeMinimapVisible(!next.betterMap);
     game.setNativeLeaderboardVisible(!next.lbImproved);
+    game.setZoom(next.zoom);
     save();
     refresh();
   }
@@ -560,9 +563,10 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     async init() {
       applyConfig(await storage.load());
       // ignore the echo of our own save (it could undo what the user typed since)
-      storage.onExternalChange((raw) => { if (JSON.stringify(sanitizeConfig(raw).config) !== lastSavedJson) applyConfig(raw); });
+      storage.onExternalChange((raw) => { if (JSON.stringify(sanitizeConfig(raw).config) !== lastSavedJson) { applyConfig(raw); game.setZoom(cfg.settings.zoom); } });
       game.setNativeMinimapVisible(!cfg.settings.betterMap);
       game.setNativeLeaderboardVisible(!cfg.settings.lbImproved);
+      game.setZoom(cfg.settings.zoom);
       timers.push(setInterval(sendState, SEND_MS));
       timers.push(setInterval(followTick, 400));
       timers.push(setInterval(() => {
@@ -738,6 +742,12 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     },
     setPaused,
     setMouseLocked,
+    zoomBy(steps) {
+      const zoom = stepZoom(cfg.settings.zoom, steps);
+      if (zoom === cfg.settings.zoom) return;
+      setSettings({ ...cfg.settings, zoom });
+      toast('Zoom ' + Math.round(zoom * 100) + '%');
+    },
     toast,
     destroy() {
       destroyed = true;

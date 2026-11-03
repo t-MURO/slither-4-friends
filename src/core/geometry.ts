@@ -6,6 +6,21 @@ export function slitherScore(sct: number, fam: number, fpsls: ArrayLike<number>,
   return Number.isFinite(v) ? v : null;
 }
 
+/** The game's own view scale (gsc) for a snake of this size; it shrinks as the snake grows. */
+export function slitherZoom(sct: number): number {
+  return 0.64285 + 0.514285714 / Math.max(1, (sct + 16) / 36);
+}
+
+export const ZOOM_MIN = 0.7;
+export const ZOOM_MAX = 1.5;
+/** one wheel notch / key press */
+export const ZOOM_STEP = 1.1;
+/** zoom factor after `steps` notches (positive = closer), clamped and rounded to whole percent */
+export function stepZoom(zoom: number, steps: number): number {
+  const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom * ZOOM_STEP ** steps));
+  return Math.round(z * 100) / 100;
+}
+
 /** distance from point (px, py) to segment a-b */
 export function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;

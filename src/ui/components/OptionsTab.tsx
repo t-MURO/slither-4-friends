@@ -1,6 +1,7 @@
 import type { Controller } from '../../app/controller';
 import { useStore } from '../../core/store';
-import { Card, Segmented, Toggle } from './common';
+import { ZOOM_MAX, ZOOM_MIN } from '../../core/geometry';
+import { Card, Range, Segmented, Toggle } from './common';
 
 export function OptionsTab(props: { c: Controller }) {
   const { c } = props;
@@ -14,6 +15,14 @@ export function OptionsTab(props: { c: Controller }) {
         <Toggle label="Show friend list in game" checked={s.hud} onChange={(hud) => set({ hud })} />
         <Toggle label="Subtle outline around friends' and tracked snakes" checked={s.outline} onChange={(outline) => set({ outline })} />
         <Toggle label="Improved leaderboard (off = the game's original)" checked={s.lbImproved} onChange={(lbImproved) => set({ lbImproved })} />
+      </Card>
+      <Card label="Zoom">
+        <Range label="View" value={s.zoom} min={ZOOM_MIN} max={ZOOM_MAX} step={0.05} format={(z) => Math.round(z * 100) + '%'}
+          onChange={(zoom) => set({ zoom })} />
+        <div class="slc-row" style={{ marginTop: '7px' }}>
+          <div class="slc-muted slc-grow">Mouse wheel over the game or the <b>+</b> / <b>−</b> keys. 100% is the game's normal view.</div>
+          <button class="slc-btn ghost" disabled={s.zoom === 1} onClick={() => set({ zoom: 1 })}>Reset</button>
+        </div>
       </Card>
       <Card label="Pause">
         <div class="slc-set" style={{ marginTop: 0 }}>

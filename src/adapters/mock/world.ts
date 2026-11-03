@@ -40,6 +40,8 @@ export class MockWorld {
   pending: ServerRef | null = null;
   nickname = 'You';
   opts: WorldOptions = { bots: 14, namedRatio: 0.6, zoom: 0.9, farPlayers: 40 };
+  /** Coop's zoom factor on top of opts.zoom (GameAdapter.setZoom) */
+  userZoom = 1;
   self: Snake = this.makeSnake(0, 'You', '#4dd8ff', this.grd, this.grd);
   bots: Snake[] = [];
   far: { name: string; score: number; color: string }[] = [];
@@ -183,7 +185,7 @@ export class MockWorld {
 
   camera(): Camera {
     const { w, h } = this.viewport();
-    const z = this.opts.zoom, c = this.self;
+    const z = this.opts.zoom * this.userZoom, c = this.self;
     return {
       toScreen: (x, y) => [(x - c.x) * z + w / 2, (y - c.y) * z + h / 2],
       toWorld: (sx, sy) => [(sx - w / 2) / z + c.x, (sy - h / 2) / z + c.y],
@@ -257,7 +259,7 @@ export class MockWorld {
       ctx.fillText(this.phase === 'connecting' ? 'connecting…' : 'Menu: press Enter or use "Play" in the dev panel', w / 2, h / 2 + 10);
       return;
     }
-    const cam = this.camera(), z = this.opts.zoom;
+    const cam = this.camera(), z = this.opts.zoom * this.userZoom;
     // hex-ish background grid
     ctx.strokeStyle = 'rgba(255,255,255,.04)';
     ctx.lineWidth = 1;
@@ -359,8 +361,9 @@ export function createMockGame(world: MockWorld): GameAdapter {
     setSteeringOverride(fn) { world.steering = fn; if (fn) world.mouse.boost = false; },
     setMouseEnabled(on) { world.mouseEnabled = on; if (!on) world.mouse.boost = false; },
     onGameClick(fn) { world.clickFn = fn; },
+    setZoom(f) { world.userZoom = f; },
     setNativeMinimapVisible(v) { world.nativeMap = v; },
     setNativeLeaderboardVisible(v) { world.nativeLb = v; },
-    destroy() { world.steering = null; world.mouseEnabled = true; world.clickFn = null; world.nativeMap = world.nativeLb = true; },
+    destroy() { world.userZoom = 1; world.steering = null; world.mouseEnabled = true; world.clickFn = null; world.nativeMap = world.nativeLb = true; },
   };
 }

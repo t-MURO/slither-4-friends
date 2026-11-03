@@ -145,6 +145,8 @@ export interface Settings {
   tracked: TrackedEntry[];
   trackPartial: boolean;
   markMode: MarkMode;
+  /** view zoom on top of the game's own (1 = the game's) */
+  zoom: number;
 }
 
 export interface Config {

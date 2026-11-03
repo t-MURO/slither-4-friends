@@ -4,6 +4,7 @@
 // connect to each other. Results: console + window.__slcCheck.
 import { createPeerNet, ICE_SERVERS } from '../adapters/real/peer-net';
 import { createSlitherGame } from '../adapters/real/slither-game';
+import { slitherZoom } from '../core/geometry';
 import { newCode, normCode } from '../core/util';
 
 declare global {
@@ -51,6 +52,14 @@ async function run() {
     await new Promise((res) => setTimeout(res, 600));
     game.setSteeringOverride(null);
     ok('pause turns the snake', Math.abs(Math.atan2(Math.sin(W.slither.ang - a0), Math.cos(W.slither.ang - a0))) > 0.5 || !W.playing, { a0, a1: W.slither.ang });
+    // zoom: the game's own scale follows slitherZoom (it eases there slowly), and setZoom scales it
+    ok('zoom formula matches the game', Math.abs(W.gsc - slitherZoom(W.slither.sct)) < 0.05, { gsc: W.gsc, formula: slitherZoom(W.slither.sct) });
+    const zoomGame = createSlitherGame();
+    zoomGame.setZoom(1.2);
+    await new Promise((res) => setTimeout(res, 300));
+    const zoomed = W.gsc / slitherZoom(W.slither.sct);
+    zoomGame.destroy();
+    ok('setZoom scales the view', Math.abs(zoomed - 1.2) < 0.01 && Math.abs(W.gsc - slitherZoom(W.slither.sct)) < 0.01, { zoomed, after: W.gsc });
   } else {
     r.note = 'Start a game for the in-game checks.';
   }

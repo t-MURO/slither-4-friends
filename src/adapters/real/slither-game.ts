@@ -1,6 +1,6 @@
 // GameAdapter for the real Slither page. This is the only file that touches
 // the game's globals (slither, slithers, view_xx, gsc, bso, sos, forcing, ...).
-import { slitherScore } from '../../core/geometry';
+import { slitherScore, slitherZoom } from '../../core/geometry';
 import { pickServerEntry } from '../../core/servers';
 import type { Camera, GameSnapshot, LeaderboardRow, MinimapInfo, Phase, ServerRef, SnakeInfo } from '../../core/types';
 import type { ClickInfo, GameAdapter } from '../types';
@@ -170,8 +170,21 @@ export function createSlitherGame(): GameAdapter {
   const timers = [setInterval(wrapInputs, 1000), setInterval(applyNative, 500)];
   wrapInputs();
   let raf = 0;
+  let zoom = 1;
+  let zoomed = false;
+  // The game eases gsc toward slitherZoom(length) by a tiny step per frame, so the factor is reapplied every frame.
+  function applyZoom() {
+    if (!inGame() || W.choosing_skin) { zoomed = false; return; }
+    if (zoom === 1 && !zoomed) return;   // leave the game alone
+    const target = slitherZoom(W.slither.sct) * zoom;
+    zoomed = zoom !== 1;
+    if (W.gsc === target) return;
+    W.gsc = target;
+    if (Array.isArray(W.bgees)) for (const b of W.bgees) if (b) b.sc = target * b.sp;   // background layers
+  }
   const steer = () => {
     raf = requestAnimationFrame(steer);
+    applyZoom();
     if (!steering || phase() !== 'playing') return;
     const a = steering({ ang: W.slither.ang });
     W.xm = Math.cos(a) * 220;
@@ -222,11 +235,14 @@ export function createSlitherGame(): GameAdapter {
       if (!on) W.setAcceleration?.(0);
     },
     onGameClick(fn) { clickFn = fn; },
+    setZoom(f) { zoom = f; },
     setNativeMinimapVisible(v) { nativeMap = v; applyNative(); },
     setNativeLeaderboardVisible(v) { nativeLb = v; applyNative(); },
     destroy() {
       for (const t of timers) clearInterval(t);
       cancelAnimationFrame(raf);
+      zoom = 1;
+      applyZoom();   // back to the game's own scale
       removeEventListener('contextmenu', onContextMenu, true);
       for (const w of wrapped) if (w.target[w.prop] === w.fn) w.target[w.prop] = w.orig;
       nativeMap = nativeLb = true;

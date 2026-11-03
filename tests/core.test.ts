@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { edgePoint, hitTest, polylineDist, slitherScore, worldToMap } from '../src/core/geometry';
+import { edgePoint, hitTest, polylineDist, slitherScore, slitherZoom, stepZoom, worldToMap } from '../src/core/geometry';
 import { pickServerEntry, sameServer } from '../src/core/servers';
 import { sanitizeConfig, sanitizeSettings, DEFAULT_SETTINGS } from '../src/core/settings';
 import { fmtCode, fmtDist, fmtScore, nameKey, newCode, normCode } from '../src/core/util';
@@ -82,4 +82,15 @@ test('edge arrow position and minimap mapping', () => {
   assert.equal(Math.round(p.x), 752);
   assert.equal(Math.round(p.y), 300);
   assert.deepEqual(worldToMap(100, 100, 100, 50, 10, 20, 30), [10, 20]);
+});
+
+test('zoom: game formula and steps', () => {
+  assert.equal(slitherZoom(0), 0.64285 + 0.514285714);          // small snake: max(1, 16/36) = 1
+  assert.ok(Math.abs(slitherZoom(200) - (0.64285 + 0.514285714 / 6)) < 1e-9);
+  assert.equal(stepZoom(1, 1), 1.1);
+  assert.equal(stepZoom(1, -1), 0.91);
+  assert.equal(stepZoom(1.45, 1), 1.5);
+  assert.equal(stepZoom(0.72, -1), 0.7);
+  assert.equal(sanitizeSettings({ zoom: 9 }).zoom, 1.5);
+  assert.equal(sanitizeSettings({}).zoom, 1);
 });

@@ -24,6 +24,7 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
     nickname: 'Me',
   };
   const joined: ServerRef[] = [];
+  const zooms: number[] = [];
   let steering: ((s: { ang: number }) => number) | null = null;
   let click: ((c: ClickInfo) => boolean) | null = null;
   const game: GameAdapter = {
@@ -34,6 +35,7 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
     setSteeringOverride: (fn) => { steering = fn; },
     setMouseEnabled: () => {},
     onGameClick: (fn) => { click = fn; },
+    setZoom: (f) => { zooms.push(f); },
     setNativeMinimapVisible: () => {},
     setNativeLeaderboardVisible: () => {},
     destroy: () => {},
@@ -69,7 +71,7 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
     t: 's', n: 'Bob', a: true, sc: 1234, g: 'bobby', x: 1500, y: 1000, srv: { sid: 4263, ip: '[2001:db8::1]', po: 444 }, ...patch,
   });
   return {
-    c, snap, joined, status, sent, listed,
+    c, snap, joined, status, sent, listed, zooms,
     request: (code: string, name: string) => onReq(code, name),
     send: (m: StateMsg) => onMsg('BBBB3333', m),
     msg,
@@ -248,5 +250,22 @@ test('"request sent" status for friends who have not accepted yet', async () => 
   t.status.set('BBBB3333', 'noanswer');
   t.c.refresh();
   assert.equal(t.c.view.get().friendRows[0].short, 'request sent');
+  t.c.destroy();
+});
+
+test('zoom: steps within limits, saved, passed to the game', async () => {
+  const t = setup();
+  await t.c.init();
+  assert.equal(t.zooms.at(-1), 1);
+  t.c.zoomBy(1);
+  assert.equal(t.c.view.get().settings.zoom, 1.1);
+  assert.equal(t.zooms.at(-1), 1.1);
+  assert.match(t.c.view.get().toast?.text ?? '', /Zoom 110%/);
+  t.c.zoomBy(20);
+  assert.equal(t.c.view.get().settings.zoom, 1.5);
+  t.c.zoomBy(-40);
+  assert.equal(t.c.view.get().settings.zoom, 0.7);
+  t.c.updateSettings({ zoom: 1 });
+  assert.equal(t.zooms.at(-1), 1);
   t.c.destroy();
 });

@@ -25,6 +25,8 @@ export interface GameAdapter {
   setMouseEnabled(on: boolean): void;
   /** Clicks on the game. Return true to consume the click (no boost). */
   onGameClick(fn: ((click: ClickInfo) => boolean) | null): void;
+  /** Zoom on top of the game's own view scale (1 = unchanged), applied while in a game. */
+  setZoom(factor: number): void;
   setNativeMinimapVisible(visible: boolean): void;
   setNativeLeaderboardVisible(visible: boolean): void;
   destroy(): void;
