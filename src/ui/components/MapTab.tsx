@@ -37,6 +37,13 @@ export function MapTab(props: { c: Controller }) {
         <Toggle label="Names next to dots" checked={s.mapNames} onChange={(mapNames) => set({ mapNames })} />
         <Toggle label="Line from you to each friend" checked={s.mapLines} onChange={(mapLines) => set({ mapLines })} />
         <Toggle label="Grid lines" checked={s.mapGrid} onChange={(mapGrid) => set({ mapGrid })} />
+        <Toggle label="Hot zones: crowded areas and recent kills" checked={s.hotZones} onChange={(hotZones) => set({ hotZones })} />
+        {s.hotZones && (
+          <div class="slc-muted" style={{ marginTop: '4px' }}>
+            <b style={{ color: '#ffa04d' }}>Orange glow</b>: many snakes (whole map). <b style={{ color: '#ff6b6b' }}>✕</b>: kills in the last 90 s that you
+            or friends on your server saw; a <b style={{ color: '#ff6b6b' }}>red ring</b> marks 3+ kills close together.
+          </div>
+        )}
         <div class="slc-row" style={{ marginTop: '10px' }}>
           <button class="slc-btn ghost" onClick={c.resetMap}>Reset map to defaults</button>
         </div>

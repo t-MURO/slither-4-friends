@@ -11,7 +11,8 @@ export function slitherZoom(sct: number): number {
   return 0.64285 + 0.514285714 / Math.max(1, (sct + 16) / 36);
 }
 
-export const ZOOM_MIN = 0.7;
+/** below ~0.5 the outer screen edges show snakes but no food (the server sends food only nearby) */
+export const ZOOM_MIN = 0.4;
 export const ZOOM_MAX = 1.5;
 /** one wheel notch / key press */
 export const ZOOM_STEP = 1.1;

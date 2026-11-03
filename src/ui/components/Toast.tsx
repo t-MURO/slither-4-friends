@@ -14,15 +14,9 @@ export function Toast(props: { c: Controller }) {
   return <div class={'slc-toast' + (shown ? ' on' : '')}>{toast?.text}</div>;
 }
 
-/** Banner while paused and/or the mouse is off. */
+/** Banner while paused (mouse off shows only on the 🖱 button). */
 export function StatusPill(props: { c: Controller }) {
-  const v = useStore(props.c.view, (v) => ({ paused: v.paused, mouse: v.mouseLocked, side: v.settings.pauseSide }));
-  if (!v.paused && !v.mouse) return null;
-  return (
-    <div class="slc-pill">
-      {v.paused && <><b>⏸ Paused</b>circling {v.side} · P to resume</>}
-      {v.paused && v.mouse && <>&nbsp;&nbsp;·&nbsp;&nbsp;</>}
-      {v.mouse && <><b>🖱 Mouse off</b>arrows/space steer · M to turn back on</>}
-    </div>
-  );
+  const v = useStore(props.c.view, (v) => ({ paused: v.paused, side: v.settings.pauseSide }));
+  if (!v.paused) return null;
+  return <div class="slc-pill"><b>⏸ Paused</b>circling {v.side} · P to resume</div>;
 }

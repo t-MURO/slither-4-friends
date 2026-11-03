@@ -29,5 +29,7 @@ The README has setup, architecture and the dev workflow; read it first.
 ## State (2026-10-29)
 - Repo: private GitHub `t-MURO/slither-4-friends` (branch `main`); tag releases as `v<version>`.
 - v4.0.1: friend-code wrap and the Coop list's misleading green swatch for offline friends are fixed.
-- v4.2.0 (uncommitted): TURN relay via turn.json, "can't connect"/"request sent" statuses, faster reconnects (hello),
-  friend requests, copy button fix on http.
+- v4.4.0: zoom down to 40 % with % in the Coop box, bigger icons, no "mouse off" banner, hot zones on the map
+  (game's `mmdata` grid + `dead` snakes, friends share kills as `k`).
+- v4.2.0 / 4.3.0: TURN relay via turn.json, "can't connect"/"request sent", faster reconnects (hello),
+  friend requests, copy fix on http; 4.3.0 zoom.

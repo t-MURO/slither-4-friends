@@ -28,11 +28,12 @@ export const DEFAULT_SETTINGS: Settings = {
   trackPartial: false,
   markMode: 'click',
   zoom: 1,
+  hotZones: false,
 };
 
 export const MAP_KEYS = [
   'betterMap', 'mapSize', 'mapCorner', 'mapBg', 'mapBgAlpha', 'densityColor', 'densityAlpha',
-  'myColor', 'friendColor', 'dotSize', 'mapNames', 'mapLines', 'mapGrid',
+  'myColor', 'friendColor', 'dotSize', 'mapNames', 'mapLines', 'mapGrid', 'hotZones',
 ] as const;
 
 const pick = <T>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
@@ -70,6 +71,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     trackPartial: bool('trackPartial'),
     markMode: pick(r.markMode, ['click', 'shift', 'right', 'off'] as const, d.markMode),
     zoom: clamp(r.zoom, ZOOM_MIN, ZOOM_MAX, d.zoom),
+    hotZones: bool('hotZones'),
   };
 }
 

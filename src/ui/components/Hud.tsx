@@ -10,7 +10,7 @@ export function Hud(props: { c: Controller; prefs: PrefsAdapter; onOpenPanel: ()
   const { c, prefs } = props;
   const v = useStore(c.view, (v) => ({
     rows: v.friendRows, requests: v.requests, signal: v.signal, pending: v.pendingJoin, showList: v.settings.hud,
-    paused: v.paused, mouseLocked: v.mouseLocked, phase: v.phase,
+    paused: v.paused, mouseLocked: v.mouseLocked, phase: v.phase, zoom: v.settings.zoom,
   }));
   const [minimized, setMin] = useState(() => prefs.get('min', false));
   const drag = useDraggable(prefs, 'pos');
@@ -31,6 +31,8 @@ export function Hud(props: { c: Controller; prefs: PrefsAdapter; onOpenPanel: ()
           onClick={() => c.setMouseLocked(!v.mouseLocked)}>
           {v.mouseLocked ? '🖱 off' : '🖱'}
         </button>
+        <button class={'pz zm' + (v.zoom !== 1 ? ' on' : '')} title="Zoom: mouse wheel or + / − keys. Click for 100%"
+          onClick={() => c.updateSettings({ zoom: 1 })}>{Math.round(v.zoom * 100)}%</button>
         <button class="ib" title="Coop settings & friends" onClick={props.onOpenPanel}>⚙</button>
         {v.showList && <button class="ib" title="Minimize" onClick={toggleMin}>{minimized ? '+' : '–'}</button>}
       </div>

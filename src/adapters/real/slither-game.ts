@@ -150,7 +150,8 @@ export function createSlitherGame(): GameAdapter {
       const k = r.width / (W.mmrad * 2 + 24);
       nativeRect = { cx: r.left + (12 + W.mmrad) * k, cy: r.top + (12 + W.mmrad) * k, rad: W.mmrad * k };
     }
-    return { grd: W.grd, flux: W.flux_grd > 0 ? W.flux_grd : W.grd * 0.98, density: a1?.width ? dens : null, nativeRect };
+    const occupancy = W.mmdata instanceof Uint8Array && W.mmsz > 0 ? { size: Number(W.mmsz), data: W.mmdata as Uint8Array } : null;
+    return { grd: W.grd, flux: W.flux_grd > 0 ? W.flux_grd : W.grd * 0.98, density: a1?.width ? dens : null, nativeRect, occupancy };
   }
 
   // ---------------------------------------------------------------- loops
@@ -172,6 +173,17 @@ export function createSlitherGame(): GameAdapter {
   let raf = 0;
   let zoom = 1;
   let zoomed = false;
+  // the server marks killed snakes dead (they fade out); snakes that just leave the view are removed instead
+  let killFn: ((k: { x: number; y: number; score: number | null }) => void) | null = null;
+  const seenDead = new WeakSet<object>();
+  function scanKills() {
+    if (!killFn || !inGame() || !Array.isArray(W.slithers)) return;
+    for (const s of W.slithers) {
+      if (!s || !s.dead || s === W.slither || seenDead.has(s)) continue;
+      seenDead.add(s);
+      killFn({ x: s.xx + (s.fx || 0), y: s.yy + (s.fy || 0), score: score(s) });
+    }
+  }
   // The game eases gsc toward slitherZoom(length) by a tiny step per frame, so the factor is reapplied every frame.
   function applyZoom() {
     if (!inGame() || W.choosing_skin) { zoomed = false; return; }
@@ -185,6 +197,7 @@ export function createSlitherGame(): GameAdapter {
   const steer = () => {
     raf = requestAnimationFrame(steer);
     applyZoom();
+    scanKills();
     if (!steering || phase() !== 'playing') return;
     const a = steering({ ang: W.slither.ang });
     W.xm = Math.cos(a) * 220;
@@ -235,12 +248,14 @@ export function createSlitherGame(): GameAdapter {
       if (!on) W.setAcceleration?.(0);
     },
     onGameClick(fn) { clickFn = fn; },
+    onKill(fn) { killFn = fn; },
     setZoom(f) { zoom = f; },
     setNativeMinimapVisible(v) { nativeMap = v; applyNative(); },
     setNativeLeaderboardVisible(v) { nativeLb = v; applyNative(); },
     destroy() {
       for (const t of timers) clearInterval(t);
       cancelAnimationFrame(raf);
+      killFn = null;
       zoom = 1;
       applyZoom();   // back to the game's own scale
       removeEventListener('contextmenu', onContextMenu, true);

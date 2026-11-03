@@ -27,6 +27,7 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
   const zooms: number[] = [];
   let steering: ((s: { ang: number }) => number) | null = null;
   let click: ((c: ClickInfo) => boolean) | null = null;
+  let killFn: ((k: { x: number; y: number; score: number | null }) => void) | null = null;
   const game: GameAdapter = {
     snapshot: () => snap,
     joinServer: (s) => { joined.push(s); return true; },
@@ -35,6 +36,7 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
     setSteeringOverride: (fn) => { steering = fn; },
     setMouseEnabled: () => {},
     onGameClick: (fn) => { click = fn; },
+    onKill: (fn) => { killFn = fn; },
     setZoom: (f) => { zooms.push(f); },
     setNativeMinimapVisible: () => {},
     setNativeLeaderboardVisible: () => {},
@@ -73,6 +75,7 @@ function setup(opts: { phase?: GameSnapshot['phase']; server?: ServerRef | null;
   return {
     c, snap, joined, status, sent, listed, zooms,
     request: (code: string, name: string) => onReq(code, name),
+    kill: (x: number, y: number, score: number | null = 500) => killFn!({ x, y, score }),
     send: (m: StateMsg) => onMsg('BBBB3333', m),
     msg,
     tick: (ms: number) => { clock += ms; },
@@ -264,8 +267,36 @@ test('zoom: steps within limits, saved, passed to the game', async () => {
   t.c.zoomBy(20);
   assert.equal(t.c.view.get().settings.zoom, 1.5);
   t.c.zoomBy(-40);
-  assert.equal(t.c.view.get().settings.zoom, 0.7);
+  assert.equal(t.c.view.get().settings.zoom, 0.4);
   t.c.updateSettings({ zoom: 1 });
   assert.equal(t.zooms.at(-1), 1);
+  t.c.destroy();
+});
+
+test('hot zones: own kills go to friends, friends\' kills on our server count, duplicates merge, off by default', async () => {
+  const t = setup({ tracked: [] });
+  await t.c.init();
+  t.c.frame(t.snap);
+  t.kill(2000, 2000);
+  assert.deepEqual(t.c.hotZones().kills, [], 'nothing while the setting is off');
+  t.c.updateSettings({ hotZones: true });
+  assert.equal(t.c.hotZones().kills.length, 1);
+
+  await new Promise((r) => setTimeout(r, 120));   // next state message carries the kill once
+  const withKills = t.sent.filter((m) => m.k);
+  assert.deepEqual(withKills.at(-1)?.k, [[2000, 2000, 500]]);
+
+  t.send(t.msg({ k: [[2030, 2010, 300], [2400, 2100, 50], [9000, 9000, null]] }));   // same server (sid 4263)
+  const hz = t.c.hotZones();
+  assert.equal(hz.kills.length, 3, 'the friend\'s report of our kill is merged');
+  assert.equal(hz.hot.length, 0, 'two kills close together are not a hot zone yet');
+  t.kill(2200, 1900);
+  assert.deepEqual(t.c.hotZones().hot.map((h) => h.count), [3]);
+
+  t.send(t.msg({ k: [[5000, 5000, 1]], srv: { sid: 1111, ip: '1.2.3.4', po: 444 } }));   // other server
+  assert.equal(t.c.hotZones().kills.length, 4);
+
+  t.tick(91_000);
+  assert.equal(t.c.hotZones().kills.length, 0, 'kills expire after 90 s');
   t.c.destroy();
 });

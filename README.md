@@ -110,6 +110,8 @@ tests/         node:test via tsx
 
 **Netzwerk:** Verbindung von Browser zu Browser per WebRTC. Nur das Signaling läuft über den öffentlichen PeerJS-Server (`0.peerjs.com`); einen eigenen Server gibt es nicht. Klappt keine direkte Verbindung, gehen die Daten über den TURN-Relay aus `turn.json` (siehe oben). Die Peer-ID ist `slcoop2-<Code>`. Es wählt immer die kleinere ID, und die Gegenseite antwortet nur Codes aus ihrer eigenen Liste. Ein Freund kommt also nur zustande, wenn beide sich eingetragen haben. Die Seite mit der größeren ID meldet sich alle 10 s mit einem „hello“ (eine CANDIDATE-Nachricht mit `connectionId: 'hello'`), damit die andere sofort wählt. Angebote und hellos tragen den eigenen Namen (`metadata.name`); erreichen sie jemanden, der den Code noch nicht eingetragen hat, sieht er eine **Freundschaftsanfrage** (Annehmen trägt den Code ein, Ablehnen gilt bis zum Neuladen). Ohne eigenen Server klappt das nur, solange beide das Spiel offen haben. Gesendet werden 10× pro Sekunde Name, Position, Punkte und Server.
 
+**Hot Zones (Karte):** Gedrängte Bereiche kommen aus dem Schlangen-Raster der ganzen Karte, das der Server fürs Minimap schickt (`mmdata`, 1 = Schlange). Kills sind Schlangen, die der Server als `dead` markiert (verschwindende Schlangen, die nur das Sichtfeld verlassen, zählen nicht). Kills sieht man nur in der Nähe; Freunde auf demselben Server schicken ihre mit (`k` in der Statusnachricht), 90 s lang.
+
 **Server:** Jeder Slither-Server steht doppelt in der Liste (IPv4 und IPv6, gleiche `sid`). Verglichen wird deshalb über die `sid`, und beim Beitreten wird immer der IPv4-Eintrag erzwungen.
 
 ## Hinweise

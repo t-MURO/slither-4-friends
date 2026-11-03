@@ -125,6 +125,10 @@ function Panel() {
                   <span>{Math.round(s.namedRatio * 100)}%</span>
                 </div>
                 <SpawnRow onSpawn={(n) => d.world.spawnNear(n)} />
+                <div class="r"><label>Kills</label>
+                  <button onClick={() => d.world.killNear()}>Kill a snake</button>
+                  <button onClick={() => d.world.killNear(4)}>Fight (4 kills)</button>
+                </div>
               </div>
             </details>
 

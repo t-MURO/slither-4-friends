@@ -59,6 +59,8 @@ export interface MinimapInfo {
   density: HTMLCanvasElement | null;
   /** where the game's own minimap is on screen (used when the Coop map is off) */
   nativeRect: { cx: number; cy: number; rad: number } | null;
+  /** the game's whole-map snake grid (size × size, 1 = a snake there), laid out like `density` */
+  occupancy: { size: number; data: ArrayLike<number> } | null;
 }
 
 export interface GameSnapshot {
@@ -91,6 +93,8 @@ export interface StateMsg {
   srv: ServerRef | null;
   /** named snakes near the sender, sent with every 5th message (older versions omit it) */
   v?: Sighting[];
+  /** kills the sender saw since its last message: [x, y, score] (older versions omit it) */
+  k?: [number, number, number | null][];
 }
 
 /** [name, x, y, score] of a snake a friend can see */
@@ -147,6 +151,8 @@ export interface Settings {
   markMode: MarkMode;
   /** view zoom on top of the game's own (1 = the game's) */
   zoom: number;
+  /** crowded areas and recent kills on the minimap */
+  hotZones: boolean;
 }
 
 export interface Config {

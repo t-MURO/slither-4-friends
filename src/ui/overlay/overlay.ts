@@ -3,6 +3,7 @@
 import type { GameAdapter } from '../../adapters/types';
 import type { Controller } from '../../app/controller';
 import { LAST_SEEN_MS } from '../../app/controller';
+import { KILL_MS } from '../../core/hotzones';
 import { edgePoint, worldToMap } from '../../core/geometry';
 import type { GameSnapshot, Settings, SnakeInfo } from '../../core/types';
 import { fmtDist, fmtScore, hexA } from '../../core/util';
@@ -156,6 +157,49 @@ export function startOverlay(c: Controller, game: GameAdapter, parent: HTMLEleme
     if (snap.server?.sid) label('server ' + snap.server.sid, cx, cy + rad + 10, 'rgba(220,230,245,.75)', 11);
   }
 
+  // crowded areas (orange glow), recent kills (red crosses, fading) and kill clusters (pulsing red ring)
+  function drawHotZones(g: NonNullable<ReturnType<typeof mapGeometry>>, s: Settings, pulse: number) {
+    const hz = c.hotZones();
+    if (!hz.crowd.length && !hz.kills.length) return;
+    const [ax] = g.at(0, 0), [bx] = g.at(1000, 0);
+    const scale = Math.abs(bx - ax) / 1000;   // map pixels per world unit
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(g.cx, g.cy, g.rad, 0, Math.PI * 2);
+    ctx.clip();
+    for (const cell of hz.crowd) {
+      const [x, y] = g.at(cell.x, cell.y);
+      const r = Math.max(6, cell.r * scale);
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, `rgba(255,150,40,${0.45 + 0.4 * cell.heat})`);
+      grad.addColorStop(0.6, `rgba(255,120,30,${0.25 + 0.25 * cell.heat})`);
+      grad.addColorStop(1, 'rgba(255,120,30,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      if (cell.heat > 0.8) {
+        ctx.strokeStyle = 'rgba(255,170,60,.8)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    ctx.lineWidth = 2;
+    for (const k of hz.kills) {
+      const [x, y] = g.at(k.x, k.y);
+      const a = Math.max(0.15, 1 - k.age / KILL_MS), d = 3;
+      ctx.strokeStyle = `rgba(255,70,70,${a})`;
+      ctx.beginPath(); ctx.moveTo(x - d, y - d); ctx.lineTo(x + d, y + d); ctx.moveTo(x + d, y - d); ctx.lineTo(x - d, y + d); ctx.stroke();
+    }
+    for (const h of hz.hot) {
+      const [x, y] = g.at(h.x, h.y);
+      const r = s.dotSize + 6 + Math.min(10, h.count) + pulse * 3;
+      ctx.strokeStyle = 'rgba(255,60,60,.9)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+      if (s.mapNames) label(h.count + ' kills', x, y + r + 8, '#ff6b6b', 10);   // below: names sit above dots
+    }
+    ctx.restore();
+  }
+
   function frame(t: number) {
     raf = requestAnimationFrame(frame);
     const snap = game.snapshot();
@@ -184,6 +228,7 @@ export function startOverlay(c: Controller, game: GameAdapter, parent: HTMLEleme
 
     const g = layers.has('minimap') ? mapGeometry(snap, s) : null;
     if (g && s.betterMap) drawMapBase(snap, s, g, t);
+    if (g && s.hotZones && layers.has('minimap')) drawHotZones(g, s, pulse);
 
     if (layers.has('friends')) {
       for (const f of friends) {

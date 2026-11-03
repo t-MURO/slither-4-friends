@@ -50,6 +50,12 @@ export class MockWorld {
   mouseEnabled = true;
   steering: ((self: { ang: number }) => number) | null = null;
   clickFn: ((c: ClickInfo) => boolean) | null = null;
+  killFn: ((k: { x: number; y: number; score: number | null }) => void) | null = null;
+  /** a nearby snake dies every few seconds (0 = never) */
+  killEveryMs = 6000;
+  private killAt = 0;
+  /** whole-map snake grid like the game's mmdata (same layout as `density`) */
+  private occupancy = new Uint8Array(96 * 96);
   nativeMap = true;
   nativeLb = true;
   readonly visibleRadius = 1700;
@@ -160,6 +166,7 @@ export class MockWorld {
       pushTrail(me);
     }
 
+    if (this.killEveryMs && t - this.killAt > this.killEveryMs) { this.killAt = t; this.killNear(); }
     for (const b of this.bots) {
       if (b.puppet) continue;
       b.turn += (Math.random() - 0.5) * 2 * dt;
@@ -204,9 +211,11 @@ export class MockWorld {
     const n = this.density.width;
     c.clearRect(0, 0, n, n);
     c.fillStyle = '#fff';
+    this.occupancy.fill(0);
     const put = (x: number, y: number, r: number) => {
-      const px = ((x - this.grd) / this.flux) * (n / 2) + n / 2, py = ((y - this.grd) / this.flux) * (n / 2) + n / 2;
-      c.fillRect(Math.round(px - r), Math.round(py - r), r * 2, r * 2);
+      const px = Math.round(((x - this.grd) / this.flux) * (n / 2) + n / 2 - r), py = Math.round(((y - this.grd) / this.flux) * (n / 2) + n / 2 - r);
+      c.fillRect(px, py, r * 2, r * 2);
+      for (let yy = py; yy < py + r * 2; yy++) for (let xx = px; xx < px + r * 2; xx++) if (xx >= 0 && yy >= 0 && xx < n && yy < n) this.occupancy[yy * n + xx] = 1;
     };
     for (const b of this.bots) put(b.x, b.y, 1);
     // pseudo-random static crowds
@@ -214,6 +223,27 @@ export class MockWorld {
       const a = (i * 2.399) % (Math.PI * 2), d = ((i * 7919) % 1000) / 1000;
       put(this.grd + Math.cos(a) * d * this.flux, this.grd + Math.sin(a) * d * this.flux, (i % 5 === 0 ? 2 : 1));
     }
+    // three busy areas: one ~3000 units from you (shows on your minimap), two fixed
+    const blobs = [[this.self.x + 2100, this.self.y - 2100], [this.grd - 9000, this.grd + 4000], [this.grd + 6000, this.grd + 8000]];
+    for (const [bx, by] of blobs) {
+      for (let i = 0; i < 40; i++) {
+        const a = i * 2.399, d = ((i * 37) % 40) / 40 * 1300;
+        put(bx + Math.cos(a) * d, by + Math.sin(a) * d, 1);
+      }
+    }
+  }
+
+  /** A nearby snake dies (it respawns elsewhere). count > 1: several deaths close together. */
+  killNear(count = 1) {
+    const near = this.visibleBots().filter((b) => !b.puppet);
+    if (!near.length) return;
+    const victim = near[Math.floor(Math.random() * near.length)];
+    for (let i = 0; i < count; i++) {
+      const x = victim.x + (i ? (Math.random() - 0.5) * 500 : 0), y = victim.y + (i ? (Math.random() - 0.5) * 500 : 0);
+      this.killFn?.({ x, y, score: Math.round(victim.score * (i ? Math.random() : 1)) });
+    }
+    const a = Math.random() * Math.PI * 2;
+    victim.x = this.self.x + Math.cos(a) * 1500; victim.y = this.self.y + Math.sin(a) * 1500; victim.trail = [];
   }
 
   leaderboard(): { rows: LeaderboardRow[]; rank: number; count: number } {
@@ -239,7 +269,7 @@ export class MockWorld {
       rank: lb.rank,
       playerCount: lb.count,
       camera: playing ? this.camera() : null,
-      minimap: playing ? { grd: this.grd, flux: this.flux, density: this.density, nativeRect: { cx: innerWidth - 80, cy: innerHeight - 80, rad: 62 } } : null,
+      minimap: playing ? { grd: this.grd, flux: this.flux, density: this.density, nativeRect: { cx: innerWidth - 80, cy: innerHeight - 80, rad: 62 }, occupancy: { size: this.density.width, data: this.occupancy } } : null,
       nickname: this.nickname,
     };
   }
@@ -361,9 +391,10 @@ export function createMockGame(world: MockWorld): GameAdapter {
     setSteeringOverride(fn) { world.steering = fn; if (fn) world.mouse.boost = false; },
     setMouseEnabled(on) { world.mouseEnabled = on; if (!on) world.mouse.boost = false; },
     onGameClick(fn) { world.clickFn = fn; },
+    onKill(fn) { world.killFn = fn; },
     setZoom(f) { world.userZoom = f; },
     setNativeMinimapVisible(v) { world.nativeMap = v; },
     setNativeLeaderboardVisible(v) { world.nativeLb = v; },
-    destroy() { world.userZoom = 1; world.steering = null; world.mouseEnabled = true; world.clickFn = null; world.nativeMap = world.nativeLb = true; },
+    destroy() { world.userZoom = 1; world.steering = null; world.mouseEnabled = true; world.clickFn = null; world.killFn = null; world.nativeMap = world.nativeLb = true; },
   };
 }

@@ -20,7 +20,7 @@ export function OptionsTab(props: { c: Controller }) {
         <Range label="View" value={s.zoom} min={ZOOM_MIN} max={ZOOM_MAX} step={0.05} format={(z) => Math.round(z * 100) + '%'}
           onChange={(zoom) => set({ zoom })} />
         <div class="slc-row" style={{ marginTop: '7px' }}>
-          <div class="slc-muted slc-grow">Mouse wheel over the game or the <b>+</b> / <b>−</b> keys. 100% is the game's normal view.</div>
+          <div class="slc-muted slc-grow">Mouse wheel over the game or the <b>+</b> / <b>−</b> keys; click the % in the Coop box for 100% (the game's normal view). Far out, the screen edges show snakes but no food.</div>
           <button class="slc-btn ghost" disabled={s.zoom === 1} onClick={() => set({ zoom: 1 })}>Reset</button>
         </div>
       </Card>

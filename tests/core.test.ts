@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { edgePoint, hitTest, polylineDist, slitherScore, slitherZoom, stepZoom, worldToMap } from '../src/core/geometry';
+import { crowdCells, crowdGrid, killClusters } from '../src/core/hotzones';
 import { pickServerEntry, sameServer } from '../src/core/servers';
 import { sanitizeConfig, sanitizeSettings, DEFAULT_SETTINGS } from '../src/core/settings';
 import { fmtCode, fmtDist, fmtScore, nameKey, newCode, normCode } from '../src/core/util';
@@ -90,7 +91,25 @@ test('zoom: game formula and steps', () => {
   assert.equal(stepZoom(1, 1), 1.1);
   assert.equal(stepZoom(1, -1), 0.91);
   assert.equal(stepZoom(1.45, 1), 1.5);
-  assert.equal(stepZoom(0.72, -1), 0.7);
+  assert.equal(stepZoom(0.42, -1), 0.4);
   assert.equal(sanitizeSettings({ zoom: 9 }).zoom, 1.5);
   assert.equal(sanitizeSettings({}).zoom, 1);
+});
+
+test('hot zones: crowd grid, crowded cells in world units, kill clusters', () => {
+  // 12×12 grid, 6-px blocks: the top-left block is full, one pixel elsewhere
+  const data = new Uint8Array(144);
+  for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) data[y * 12 + x] = 1;
+  data[11 * 12 + 11] = 1;
+  const g = crowdGrid({ size: 12, data }, 6);
+  assert.deepEqual(g, [1, 0, 0, 1 / 36]);
+  const cells = crowdCells(g, 12, 6, 1200, 1200);
+  assert.equal(cells.length, 1);
+  // block center = grid pixel (3, 3); grid center (6, 6) = world (1200, 1200); 1 px = 200 world units
+  assert.deepEqual([cells[0].x, cells[0].y, cells[0].heat], [600, 600, 1]);
+  assert.deepEqual(crowdCells([0.05, 0.02, 0, 0], 12, 6, 1200, 1200), [], 'nothing stands out');
+
+  const k = (x: number, y: number) => ({ x, y, score: 1, t: 0 });
+  const cl = killClusters([k(0, 0), k(100, 0), k(0, 100), k(5000, 5000)]);
+  assert.deepEqual(cl.map((c) => c.count).sort(), [1, 3]);
 });

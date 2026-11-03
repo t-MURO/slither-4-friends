@@ -2,16 +2,18 @@
 .slc-root { font: 12px/1.35 Arial, Helvetica, sans-serif; color: #e8eef5; }
 
 /* ---------- HUD (friend list) */
-.slc-hud { position: fixed; top: 10px; left: 10px; z-index: 2147483000; width: 236px; background: rgba(12,18,28,.86);
+.slc-hud { position: fixed; top: 10px; left: 10px; z-index: 2147483000; width: 272px; background: rgba(12,18,28,.86);
   border: 1px solid rgba(255,255,255,.14); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.35); user-select: none; }
 .slc-hud .hd { display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; cursor: move; font-weight: bold; }
 .slc-hud .dot { width: 8px; height: 8px; border-radius: 50%; background: #666; flex: none; }
 .slc-hud .dot.on { background: #5bff8a; box-shadow: 0 0 6px #5bff8a; }
-.slc-hud .ib { background: none; border: 0; color: #9fb0c3; font-size: 14px; cursor: pointer; padding: 0 3px; line-height: 1; }
+.slc-hud .ib { background: none; border: 0; color: #9fb0c3; font-size: 19px; cursor: pointer; padding: 0 3px; line-height: 1; min-width: 20px; }
 .slc-hud .ib:hover { color: #fff; }
 .slc-hud .pz { background: #263247; border: 0; border-radius: 5px; color: #e8eef5; font: bold 11px Arial; padding: 3px 8px; cursor: pointer; }
 .slc-hud .pz.first { margin-left: auto; }
 .slc-hud .pz.ms { padding: 3px 6px; }
+.slc-hud .pz.zm { padding: 3px 5px; min-width: 38px; font-variant-numeric: tabular-nums; }
+.slc-hud .pz.zm.on { background: #2c6bed; color: #fff; }
 .slc-hud .pz:hover { filter: brightness(1.2); }
 .slc-hud .pz.on { background: #ffb547; color: #1a1300; }
 .slc-hud .pz:disabled { opacity: .4; cursor: default; }

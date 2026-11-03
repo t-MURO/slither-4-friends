@@ -3,6 +3,7 @@
 // the action methods; the overlay asks for per-frame models.
 import type { Adapters, ClickInfo } from '../adapters/types';
 import { hitTest, stepZoom } from '../core/geometry';
+import { crowdCells, crowdGrid, killClusters, HOT_KILLS, KILL_MS, type CrowdCell, type Kill, type KillCluster } from '../core/hotzones';
 import { sameServer } from '../core/servers';
 import { sanitizeConfig, sanitizeSettings, DEFAULT_SETTINGS, MAP_KEYS, TRACK_COLORS } from '../core/settings';
 import { createStore, type Store } from '../core/store';
@@ -109,6 +110,9 @@ export interface RemoteTracked { key: string; x: number; y: number; color: strin
 /** Where to point a tracked player's arrow: from your own view, a friend's view, or where they were last seen. */
 export interface TrackTarget { x: number; y: number; color: string; label: string; score: number | null; source: 'here' | 'friend' | 'seen'; age: number }
 
+/** What the minimap shows when hot zones are on. */
+export interface HotZones { crowd: CrowdCell[]; kills: (Kill & { age: number })[]; hot: KillCluster[] }
+
 interface TempTracked { id: number; color: string; label: string; added: number; arrow: boolean }
 interface SeenEntry { key: string; name: string; x: number; y: number; t: number; score: number | null }
 
@@ -127,6 +131,8 @@ export interface Controller {
   trackedRemote(): RemoteTracked[];
   /** one target per tracked player whose arrow is on (and whose position is known) */
   trackedArrows(): TrackTarget[];
+  /** crowded areas and recent kills (empty unless the setting is on and you're in a game) */
+  hotZones(): HotZones;
   // ---- actions
   setName(name: string): void;
   addFriend(code: string, label: string): string | null;
@@ -167,6 +173,12 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
   const live = new Map<string, LiveFriend>();
   const temp: TempTracked[] = [];
   const requests = new Map<string, { name: string; seen: number }>();
+  /** recent kills on this server: seen by us or reported by friends here */
+  let kills: Kill[] = [];
+  /** kills we saw ourselves since the last message to friends */
+  let ownKills: [number, number, number | null][] = [];
+  let crowd: { at: number; grid: number[]; size: number; block: number } | null = null;
+  let wasAlive = false;
   const declined = new Set<string>();
   const seen = new Map<string, SeenEntry>();
   let visible: { snake: SnakeInfo; key: string; color: string; label: string }[] = [];
@@ -276,6 +288,13 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       }
       f.sightsAt = f.seen;
     }
+    // kills near them count for us too when we're on the same server
+    if (Array.isArray(m.k) && sameServer(snap.server, f.srv)) {
+      for (const k of m.k.slice(0, 20)) {
+        if (!Array.isArray(k) || !Number.isFinite(Number(k[0])) || !Number.isFinite(Number(k[1]))) continue;
+        addKill(Number(k[0]), Number(k[1]), typeof k[2] === 'number' && Number.isFinite(k[2]) ? k[2] : null);
+      }
+    }
   });
 
   net.onRequest((rawCode, rawName) => {
@@ -287,6 +306,19 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     requests.set(code, { name, seen: now() });
     if (isNew) { toast((name || fmtCode(code)) + ' wants to add you as a friend'); refresh(); }
   });
+
+  function addKill(x: number, y: number, score: number | null) {
+    const t = now();
+    // the same death reported by us and a friend: keep one
+    if (kills.some((k) => t - k.t < 3000 && Math.hypot(k.x - x, k.y - y) < 120)) return;
+    kills.push({ x, y, score, t });
+    if (kills.length > 300) kills.splice(0, kills.length - 300);
+  }
+  function ownKill(x: number, y: number, score: number | null) {
+    addKill(x, y, score);
+    if (ownKills.length < 20) ownKills.push([Math.round(x), Math.round(y), score]);
+  }
+  game.onKill((k) => { if (inGame()) ownKill(k.x, k.y, k.score); });
 
   function sendState() {
     net.setName(myName());
@@ -306,6 +338,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       msg.v = snap.snakes.filter((s) => s.name.trim()).slice(0, MAX_SIGHTINGS)
         .map((s): Sighting => [s.name.slice(0, 24), Math.round(s.x), Math.round(s.y), s.score]);
     }
+    if (ownKills.length) { msg.k = ownKills; ownKills = []; }
     net.send(msg);
   }
 
@@ -341,7 +374,7 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
 
   function updateTracking() {
     const sid = snap.server?.sid ?? 0;
-    if (sid && sid !== seenSid) { seen.clear(); temp.length = 0; seenSid = sid; }
+    if (sid && sid !== seenSid) { seen.clear(); temp.length = 0; kills = []; ownKills = []; crowd = null; seenSid = sid; }
     visible = [];
     remote = [];
     if (!inGame()) return;
@@ -578,6 +611,9 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
     frame(s) {
       lastFrame = now();
       snap = s;
+      // our own death is a kill too
+      if (wasAlive && s.phase === 'dead' && s.self) ownKill(s.self.x, s.self.y, s.self.score);
+      wasAlive = s.phase === 'playing';
       if (paused && !alive()) setPaused(false);
       updateTracking();
       for (const f of live.values()) { f.dx += (f.x - f.dx) * 0.25; f.dy += (f.y - f.dy) * 0.25; }
@@ -608,6 +644,27 @@ export function createController(ad: Adapters, opts: { now?: () => number } = {}
       return out;
     },
     trackedRemote: () => remote.slice(),
+    hotZones() {
+      const none: HotZones = { crowd: [], kills: [], hot: [] };
+      if (!cfg.settings.hotZones || !inGame()) return none;
+      const t = now();
+      kills = kills.filter((k) => t - k.t < KILL_MS);
+      const mm = snap.minimap;
+      // the grid changes about once a second; smooth it so single snakes passing by don't flicker
+      if (mm?.occupancy && (!crowd || t - crowd.at > 1000 || crowd.size !== mm.occupancy.size)) {
+        // the game sizes its grid to the window (24…140+ px): ~20 blocks across whatever the size
+        const size = mm.occupancy.size, block = Math.max(2, Math.round(size / 20));
+        const g = crowdGrid(mm.occupancy, block);
+        crowd = crowd && crowd.size === size && crowd.grid.length === g.length
+          ? { at: t, size, block, grid: crowd.grid.map((v, i) => v * 0.7 + g[i] * 0.3) }
+          : { at: t, size, block, grid: g };
+      }
+      return {
+        crowd: crowd && mm ? crowdCells(crowd.grid, crowd.size, crowd.block, mm.grd, mm.flux) : [],
+        kills: kills.map((k) => ({ ...k, age: t - k.t })),
+        hot: killClusters(kills).filter((c) => c.count >= HOT_KILLS),
+      };
+    },
     trackedArrows() {
       const out: TrackTarget[] = [];
       if (!alive()) return out;

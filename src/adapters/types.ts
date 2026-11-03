@@ -23,6 +23,8 @@ export interface GameAdapter {
   setSteeringOverride(fn: ((self: { ang: number }) => number) | null): void;
   /** false = mouse no longer steers or boosts (arrow keys still work). */
   setMouseEnabled(on: boolean): void;
+  /** Another snake near you was killed (not: left your view). Our own death is the phase going to 'dead'. */
+  onKill(fn: ((kill: { x: number; y: number; score: number | null }) => void) | null): void;
   /** Clicks on the game. Return true to consume the click (no boost). */
   onGameClick(fn: ((click: ClickInfo) => boolean) | null): void;
   /** Zoom on top of the game's own view scale (1 = unchanged), applied while in a game. */

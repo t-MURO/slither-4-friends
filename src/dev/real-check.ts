@@ -42,6 +42,9 @@ async function run() {
     }
     ok('my row on leaderboard or rank', s2.leaderboard.some((x) => x.me) || s2.rank > 10, { rank: s2.rank });
     ok('minimap', !!snap.minimap && snap.minimap.grd > 0 && !!snap.minimap.density, snap.minimap && { grd: snap.minimap.grd, flux: snap.minimap.flux });
+    // hot zones read the game's whole-map snake grid; kills are snakes the server marks `dead`
+    ok('occupancy grid (hot zones)', !!snap.minimap?.occupancy && snap.minimap.occupancy.size > 0 && snap.minimap.occupancy.data.length === snap.minimap.occupancy.size ** 2,
+      snap.minimap?.occupancy && { size: snap.minimap.occupancy.size });
     // pending server: choose our own server again by id and restore the game's state afterwards
     const before = { forcing: W.forcing, fobso: W.fobso };
     ok('joinServer picks IPv4 entry', game.joinServer({ ...snap.server!, ip: '[2001:db8::1]' }) && !String(W.fobso?.ip).startsWith('['), W.fobso);
